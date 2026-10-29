@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>테이크아웃 유통기한 관리 대시보드</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
+    .badge-normal { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-warning { background-color: #ffedd5; color: #c2410c; border: 1px solid #fdba74; }
+    .badge-danger { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    
+    /* 모달 표시 제어용 전용 클래스 */
+    .modal-backdrop { display: none; }
+    .modal-backdrop.active { display: flex; }
+  </style>
+</head>
+<body class="text-slate-800 pb-24">
+
+  <!-- 상단 헤더 -->
+  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-3.5 flex justify-between items-center">
+      <div class="flex items-center space-x-2.5">
+        <i class="fa-solid fa-clipboard-check text-emerald-400 text-xl"></i>
+        <h1 class="text-base md:text-xl font-bold tracking-tight">테이크아웃 유통기한 대시보드</h1>
+      </div>
+      <button type="button" onclick="openFormModal()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold px-3.5 py-2 rounded-lg text-sm flex items-center space-x-1.5 shadow transition cursor-pointer">
+        <i class="fa-solid fa-camera"></i>
+        <span>점검 등록</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-5 space-y-5">
+
+    <!-- 상단 요약 카드 (Summary Cards) -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <span class="text-xs font-semibold text-slate-500">총 점검 건수</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="stat-total" class="text-2xl md:text-3xl font-extrabold text-slate-800">0</span>
+          <span class="text-xs text-slate-400">건</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <span class="text-xs font-semibold text-emerald-600">정상 건수</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="stat-normal" class="text-2xl md:text-3xl font-extrabold text-emerald-600">0</span>
+          <i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <span class="text-xs font-semibold text-amber-600">특이사항 (임박/폐기)</span>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="stat-alert" class="text-2xl md:text-3xl font-extrabold text-rose-600">0</span>
+          <i class="fa-solid fa-triangle-exclamation text-amber-500 text-lg"></i>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 col-span-2 lg:col-span-1">
+        <span class="text-xs font-semibold text-slate-500">위치별 점검 현황</span>
+        <div id="stat-locations" class="mt-2 flex flex-wrap gap-1.5 text-xs">
+          <span class="text-slate-400">기록 없음</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 필터 및 뷰 전환 컨트롤 바 -->
+    <section class="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center space-x-1.5">
+          <label class="text-xs font-bold text-slate-600">날짜:</label>
+          <input type="date" id="filter-date" onchange="fetchDataFromServer()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+          <button type="button" onclick="fetchAllDates()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg font-semibold transition">전체보기</button>
+        </div>
+
+        <select id="filter-location" onchange="renderDashboard()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs md:text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          <option value="ALL">모든 위치</option>
+        </select>
+
+        <select id="filter-status" onchange="renderDashboard()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs md:text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          <option value="ALL">모든 상태</option>
+          <option value="정상">정상</option>
+          <option value="당일소진·임박">당일소진·임박</option>
+          <option value="폐기완료">폐기완료</option>
+        </select>
+      </div>
+
+      <div class="flex items-center justify-between md:justify-end space-x-2 border-t md:border-t-0 pt-2.5 md:pt-0">
+        <button type="button" onclick="fetchDataFromServer()" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>새로고침</span>
+        </button>
+        <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100">
+          <button type="button" id="btn-grid" onclick="switchView('grid')" class="px-2.5 py-1 rounded-md text-xs font-bold bg-white text-slate-800 shadow-sm">
+            <i class="fa-solid fa-grip"></i> 카드뷰
+          </button>
+          <button type="button" id="btn-table" onclick="switchView('table')" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-slate-800">
+            <i class="fa-solid fa-list"></i> 테이블뷰
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 로딩 스피너 -->
+    <div id="loading" class="hidden py-14 text-center">
+      <i class="fa-solid fa-circle-notch fa-spin text-3xl text-emerald-500"></i>
+      <p class="text-sm text-slate-500 mt-2 font-medium">데이터를 불러오고 있습니다...</p>
+    </div>
+
+    <!-- 데이터 없음 안내 -->
+    <div id="empty-state" class="hidden bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
+      <i class="fa-regular fa-image text-4xl text-slate-300"></i>
+      <h3 class="mt-3 text-sm md:text-base font-bold text-slate-700">등록된 유통기한 점검 내역이 없습니다</h3>
+      <p class="mt-1 text-xs text-slate-400">우측 상단 또는 하단 카메라 버튼을 눌러 라벨 사진을 등록해 주세요.</p>
+    </div>
+
+    <!-- 1. 카드형 갤러리 뷰 -->
+    <section id="view-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></section>
+
+    <!-- 2. 테이블 뷰 -->
+    <section id="view-table" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs md:text-sm">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+              <th class="py-3 px-4">라벨 사진</th>
+              <th class="py-3 px-4">점검일시</th>
+              <th class="py-3 px-4">위치</th>
+              <th class="py-3 px-4">제품명/메모</th>
+              <th class="py-3 px-4">상태</th>
+              <th class="py-3 px-4 text-right">드라이브</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" class="divide-y divide-slate-200"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 모바일 전용 우측 하단 플로팅 촬영 버튼 -->
+  <button type="button" onclick="openFormModal()" class="md:hidden fixed bottom-6 right-5 z-20 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center text-2xl transition cursor-pointer">
+    <i class="fa-solid fa-camera"></i>
+  </button>
+
+  <!-- 점검 데이터 입력 모달 (hidden 충돌 제거) -->
+  <div id="form-modal" class="modal-backdrop fixed inset-0 bg-slate-900/60 z-40 items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-100 my-auto" onclick="event.stopPropagation()">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <h2 class="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-camera text-emerald-500"></i>
+          <span>유통기한 라벨 등록</span>
+        </h2>
+        <button type="button" onclick="closeFormModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <form id="upload-form" onsubmit="submitForm(event)" class="space-y-4 mt-4">
+        <!-- 점검 날짜 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">점검 날짜</label>
+          <input type="date" id="input-date" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+
+        <!-- 위치 선택 (라디오 버튼) -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">위치 선택</label>
+          <div id="location-radio-group" class="grid grid-cols-2 gap-2"></div>
+        </div>
+
+        <!-- 상태 선택 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">유통기한 상태</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="cursor-pointer">
+              <input type="radio" name="status" value="정상" checked class="peer sr-only">
+              <div class="text-center py-2 px-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 peer-checked:bg-emerald-50 peer-checked:border-emerald-500 peer-checked:text-emerald-700 transition">
+                🟢 정상
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="status" value="당일소진·임박" class="peer sr-only">
+              <div class="text-center py-2 px-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 peer-checked:bg-amber-50 peer-checked:border-amber-500 peer-checked:text-amber-700 transition">
+                🟠 당일소진·임박
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="status" value="폐기완료" class="peer sr-only">
+              <div class="text-center py-2 px-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 peer-checked:bg-rose-50 peer-checked:border-rose-500 peer-checked:text-rose-700 transition">
+                🔴 폐기완료
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 제품명 / 메모 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">제품명 / 간단 메모 (선택)</label>
+          <input type="text" id="input-product" placeholder="예: 닭가슴살 샐러드, 샌드위치 쇼케이스" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+
+        <!-- 사진 촬영 및 첨부 (카메라 직접 호출 & 갤러리 선택 분리로 호환성 100% 보장) -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">사진 촬영 / 첨부 (세로 800px 자동 최적화)</label>
+          
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <!-- 버튼 1: 모바일 후면 카메라 바로 실행 -->
+            <div class="relative overflow-hidden bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl py-3 px-3 flex flex-col items-center justify-center cursor-pointer transition">
+              <i class="fa-solid fa-camera text-xl mb-1 text-emerald-600"></i>
+              <span class="text-xs font-bold">카메라로 바로 촬영</span>
+              <input type="file" id="input-camera" accept="image/*" capture="environment" onchange="processImage(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+            </div>
+
+            <!-- 버튼 2: 사진첩(갤러리) 또는 PC 파일 선택 -->
+            <div class="relative overflow-hidden bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl py-3 px-3 flex flex-col items-center justify-center cursor-pointer transition">
+              <i class="fa-regular fa-images text-xl mb-1 text-slate-600"></i>
+              <span class="text-xs font-bold">앨범/파일에서 선택</span>
+              <input type="file" id="input-gallery" accept="image/*" onchange="processImage(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+            </div>
+          </div>
+
+          <!-- 사진 미리보기 영역 -->
+          <div id="preview-box" class="border-2 border-dashed border-slate-200 rounded-xl p-3 bg-slate-50 flex flex-col items-center justify-center min-h-[120px]">
+            <div id="preview-placeholder" class="text-center py-2">
+              <p class="text-xs text-slate-400">위 버튼을 눌러 사진을 찍거나 선택하면<br>여기에 미리보기가 표시됩니다.</p>
+            </div>
+            <img id="preview-img" class="hidden max-h-52 rounded-lg object-contain shadow-sm" alt="미리보기">
+          </div>
+        </div>
+
+        <!-- 하단 제출 버튼 -->
+        <div class="pt-2 flex space-x-2">
+          <button type="button" onclick="closeFormModal()" class="w-1/3 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100">취소</button>
+          <button type="submit" id="btn-submit" class="w-2/3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 disabled:opacity-50">
+            <span id="submit-text">업로드 및 저장</span>
+            <i id="submit-spinner" class="fa-solid fa-spinner fa-spin hidden"></i>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 이미지 확대 라이트박스 모달 -->
+  <div id="lightbox-modal" onclick="closeLightbox()" class="modal-backdrop fixed inset-0 bg-black/85 z-50 flex-col items-center justify-center p-4">
+    <div class="max-w-3xl w-full flex justify-between items-center text-white mb-3 px-1" onclick="event.stopPropagation()">
+      <div>
+        <span id="lb-title" class="font-bold text-sm md:text-base"></span>
+      </div>
+      <div class="flex items-center space-x-3">
+        <a id="lb-drive-link" href="#" target="_blank" class="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg font-semibold flex items-center space-x-1 transition">
+          <i class="fa-brands fa-google-drive"></i>
+          <span>원본 열기</span>
+        </a>
+        <button type="button" onclick="closeLightbox()" class="text-white hover:text-slate-300 text-2xl leading-none">&times;</button>
+      </div>
+    </div>
+    <img id="lb-img" src="" class="max-h-[80vh] max-w-full rounded-lg object-contain shadow-2xl" onclick="event.stopPropagation()" alt="확대 이미지">
+  </div>
+
+  <script>
+    /**
+     * [설정] 현장 위치 목록 배열
+     */
+    const LOCATIONS = ['R3 테이크아웃존', 'R4 테이크아웃존', 'R5 테이크아웃존', '기타'];
+
+    // 사진 리사이징 기준: 세로 800px, JPEG 품질 0.7
+    const TARGET_HEIGHT = 800;
+    const JPEG_QUALITY = 0.7;
+
+    let allRecords = [];
+    let currentView = 'grid';
+    let resizedBase64 = null;
+
+    // 안전한 초기화 실행
+    function initApp() {
+      const today = getTodayString();
+      const filterDateEl = document.getElementById('filter-date');
+      const inputDateEl = document.getElementById('input-date');
+      if (filterDateEl) filterDateEl.value = today;
+      if (inputDateEl) inputDateEl.value = today;
+
+      initLocationUI();
+      fetchDataFromServer();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+
+    function getTodayString() {
+      const now = new Date();
+      const offset = now.getTimezoneOffset() * 60000;
+      return new Date(now.getTime() - offset).toISOString().split('T')[0];
+    }
+
+    // 위치 선택 옵션 동적 생성
+    function initLocationUI() {
+      const filterSelect = document.getElementById('filter-location');
+      const radioGroup = document.getElementById('location-radio-group');
+      
+      // 중복 생성 방지
+      filterSelect.innerHTML = '<option value="ALL">모든 위치</option>';
+      radioGroup.innerHTML = '';
+
+      LOCATIONS.forEach((loc, idx) => {
+        const opt = document.createElement('option');
+        opt.value = loc;
+        opt.textContent = loc;
+        filterSelect.appendChild(opt);
+
+        const label = document.createElement('label');
+        label.className = 'cursor-pointer';
+        label.innerHTML = `
+          <input type="radio" name="location" value="${loc}" ${idx === 0 ? 'checked' : ''} class="peer sr-only">
+          <div class="text-center py-2 px-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 peer-checked:bg-slate-800 peer-checked:border-slate-800 peer-checked:text-white transition truncate">
+            ${loc}
+          </div>
+        `;
+        radioGroup.appendChild(label);
+      });
+    }
+
+    // 서버에서 데이터 불러오기
+    function fetchDataFromServer(dateParam) {
+      const dateFilter = dateParam || document.getElementById('filter-date').value || 'ALL';
+      showLoading(true);
+
+      if (typeof google === 'undefined' || !google.script) {
+        showLoading(false);
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          showLoading(false);
+          if (res && res.success) {
+            allRecords = res.data || [];
+            renderDashboard();
+          } else {
+            alert(res ? res.message : '데이터 응답 오류');
+          }
+        })
+        .withFailureHandler((err) => {
+          showLoading(false);
+          alert('서버 통신 오류: ' + err);
+        })
+        .getRecords(dateFilter);
+    }
+
+    function fetchAllDates() {
+      document.getElementById('filter-date').value = '';
+      fetchDataFromServer('ALL');
+    }
+
+    // 대시보드 렌더링
+    function renderDashboard() {
+      const locFilter = document.getElementById('filter-location').value;
+      const statusFilter = document.getElementById('filter-status').value;
+
+      const filtered = allRecords.filter(item => {
+        const matchLoc = (locFilter === 'ALL') || (item.location === locFilter);
+        const matchStatus = (statusFilter === 'ALL') || (item.status === statusFilter);
+        return matchLoc && matchStatus;
+      });
+
+      updateSummaryCards(filtered);
+      renderViews(filtered);
+    }
+
+    function updateSummaryCards(data) {
+      const total = data.length;
+      const normal = data.filter(d => d.status === '정상').length;
+      const alertCount = data.filter(d => d.status !== '정상').length;
+
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-normal').textContent = normal;
+      document.getElementById('stat-alert').textContent = alertCount;
+
+      const locCounts = {};
+      LOCATIONS.forEach(l => locCounts[l] = 0);
+      data.forEach(d => {
+        locCounts[d.location] = (locCounts[d.location] || 0) + 1;
+      });
+
+      const locContainer = document.getElementById('stat-locations');
+      locContainer.innerHTML = '';
+      Object.entries(locCounts).forEach(([loc, cnt]) => {
+        const badge = document.createElement('span');
+        badge.className = `px-2 py-0.5 rounded-md font-semibold ${cnt > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400'}`;
+        badge.textContent = `${loc}: ${cnt}건`;
+        locContainer.appendChild(badge);
+      });
+    }
+
+    function getStatusBadgeClass(status) {
+      if (status === '정상') return 'badge-normal';
+      if (status === '당일소진·임박') return 'badge-warning';
+      return 'badge-danger';
+    }
+
+    function renderViews(data) {
+      const gridEl = document.getElementById('view-grid');
+      const tableBody = document.getElementById('table-body');
+      const emptyEl = document.getElementById('empty-state');
+
+      gridEl.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      if (data.length === 0) {
+        emptyEl.classList.remove('hidden');
+        gridEl.classList.add('hidden');
+        document.getElementById('view-table').classList.add('hidden');
+        return;
+      }
+
+      emptyEl.classList.add('hidden');
+      if (currentView === 'grid') {
+        gridEl.classList.remove('hidden');
+        document.getElementById('view-table').classList.add('hidden');
+      } else {
+        gridEl.classList.add('hidden');
+        document.getElementById('view-table').classList.remove('hidden');
+      }
+
+      data.forEach(item => {
+        const thumbUrl = `https://drive.google.com/thumbnail?id=${item.fileId}&sz=w800`;
+        const badgeClass = getStatusBadgeClass(item.status);
+
+        // 1. 카드 생성
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-md transition';
+        card.innerHTML = `
+          <div class="relative h-48 bg-slate-100 cursor-pointer overflow-hidden group" onclick="openLightbox('${item.fileId}', '${escapeHtml(item.location)}', '${escapeHtml(item.productName)}', '${item.fileUrl}')">
+            <img src="${thumbUrl}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="유통기한 사진">
+            <span class="absolute top-2.5 right-2.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-sm ${badgeClass}">
+              ${item.status}
+            </span>
+          </div>
+          <div class="p-3.5 flex-1 flex flex-col justify-between space-y-2">
+            <div>
+              <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+                <span><i class="fa-solid fa-location-dot text-slate-400 mr-1"></i>${escapeHtml(item.location)}</span>
+                <span>${item.timestamp.slice(5, 16)}</span>
+              </div>
+              <h4 class="font-bold text-slate-800 text-sm mt-1 truncate">${escapeHtml(item.productName)}</h4>
+            </div>
+            <div class="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+              <span class="text-slate-400">점검일: ${item.checkDate}</span>
+              <a href="${item.fileUrl}" target="_blank" class="text-emerald-600 hover:underline font-semibold flex items-center gap-1">
+                <span>원본</span><i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+              </a>
+            </div>
+          </div>
+        `;
+        gridEl.appendChild(card);
+
+        // 2. 테이블 행 생성
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition';
+        tr.innerHTML = `
+          <td class="py-2.5 px-4">
+            <img src="${thumbUrl}" onclick="openLightbox('${item.fileId}', '${escapeHtml(item.location)}', '${escapeHtml(item.productName)}', '${item.fileUrl}')" class="w-14 h-14 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-80">
+          </td>
+          <td class="py-2.5 px-4 text-slate-500 whitespace-nowrap">${item.timestamp}</td>
+          <td class="py-2.5 px-4 font-semibold text-slate-700 whitespace-nowrap">${escapeHtml(item.location)}</td>
+          <td class="py-2.5 px-4 text-slate-800 font-medium">${escapeHtml(item.productName)}</td>
+          <td class="py-2.5 px-4 whitespace-nowrap">
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full ${badgeClass}">${item.status}</span>
+          </td>
+          <td class="py-2.5 px-4 text-right whitespace-nowrap">
+            <a href="${item.fileUrl}" target="_blank" class="text-slate-400 hover:text-emerald-600 p-1.5">
+              <i class="fa-brands fa-google-drive text-base"></i>
+            </a>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // Canvas API를 이용한 사진 리사이징 (세로 해상도 800px 고정 비율)
+    function processImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          
+          const scaleFactor = TARGET_HEIGHT / img.height;
+          canvas.height = TARGET_HEIGHT;
+          canvas.width = Math.round(img.width * scaleFactor);
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          resizedBase64 = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+
+          const previewImg = document.getElementById('preview-img');
+          previewImg.src = resizedBase64;
+          previewImg.classList.remove('hidden');
+          document.getElementById('preview-placeholder').classList.add('hidden');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // 폼 제출 및 업로드
+    function submitForm(event) {
+      event.preventDefault();
+
+      if (!resizedBase64) {
+        alert('카메라로 촬영하거나 앨범에서 라벨 사진을 먼저 선택해 주세요.');
+        return;
+      }
+
+      const checkDate = document.getElementById('input-date').value;
+      const locationEl = document.querySelector('input[name="location"]:checked');
+      const statusEl = document.querySelector('input[name="status"]:checked');
+      
+      const location = locationEl ? locationEl.value : LOCATIONS[0];
+      const status = statusEl ? statusEl.value : '정상';
+      const productName = document.getElementById('input-product').value.trim();
+
+      const btnSubmit = document.getElementById('btn-submit');
+      const submitText = document.getElementById('submit-text');
+      const submitSpinner = document.getElementById('submit-spinner');
+
+      btnSubmit.disabled = true;
+      submitText.textContent = '드라이브 저장 중...';
+      submitSpinner.classList.remove('hidden');
+
+      const payload = {
+        checkDate,
+        location,
+        status,
+        productName,
+        imageBase64: resizedBase64
+      };
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          btnSubmit.disabled = false;
+          submitText.textContent = '업로드 및 저장';
+          submitSpinner.classList.add('hidden');
+
+          if (res && res.success) {
+            closeFormModal();
+            document.getElementById('filter-date').value = checkDate;
+            fetchDataFromServer(checkDate);
+          } else {
+            alert(res ? res.message : '저장 중 오류가 발생했습니다.');
+          }
+        })
+        .withFailureHandler((err) => {
+          btnSubmit.disabled = false;
+          submitText.textContent = '업로드 및 저장';
+          submitSpinner.classList.add('hidden');
+          alert('업로드 중 오류가 발생했습니다: ' + err);
+        })
+        .uploadRecord(payload);
+    }
+
+    // 뷰 전환
+    function switchView(mode) {
+      currentView = mode;
+      const btnGrid = document.getElementById('btn-grid');
+      const btnTable = document.getElementById('btn-table');
+
+      if (mode === 'grid') {
+        btnGrid.className = 'px-2.5 py-1 rounded-md text-xs font-bold bg-white text-slate-800 shadow-sm';
+        btnTable.className = 'px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-slate-800';
+      } else {
+        btnTable.className = 'px-2.5 py-1 rounded-md text-xs font-bold bg-white text-slate-800 shadow-sm';
+        btnGrid.className = 'px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-slate-800';
+      }
+      renderDashboard();
+    }
+
+    // 모달 제어 (클래스 충돌 없이 확실하게 동작)
+    function openFormModal() {
+      const modal = document.getElementById('form-modal');
+      modal.classList.add('active');
+    }
+
+    function closeFormModal() {
+      const modal = document.getElementById('form-modal');
+      modal.classList.remove('active');
+      
+      document.getElementById('input-product').value = '';
+      document.getElementById('input-camera').value = '';
+      document.getElementById('input-gallery').value = '';
+      document.getElementById('preview-img').classList.add('hidden');
+      document.getElementById('preview-placeholder').classList.remove('hidden');
+      resizedBase64 = null;
+    }
+
+    function openLightbox(fileId, location, product, fileUrl) {
+      document.getElementById('lb-img').src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+      document.getElementById('lb-title').textContent = `[${location}] ${product}`;
+      document.getElementById('lb-drive-link').href = fileUrl;
+      document.getElementById('lightbox-modal').classList.add('active');
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox-modal').classList.remove('active');
+      document.getElementById('lb-img').src = '';
+    }
+
+    function showLoading(isLoading) {
+      const loader = document.getElementById('loading');
+      if (isLoading) {
+        loader.classList.remove('hidden');
+      } else {
+        loader.classList.add('hidden');
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
