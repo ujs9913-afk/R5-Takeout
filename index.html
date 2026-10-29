@@ -1,586 +1,248 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <!-- 모바일 홈 화면에 추가 시 앱처럼 전체화면으로 실행되도록 설정 -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#065f46">
-  <title>유통기한 사진 점검 앱</title>
-  
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    body {
-      font-family: 'Pretendard', sans-serif;
-      background-color: #cbd5e1; /* PC에서 볼 때 스마트폰 앱 테두리가 돋보이도록 배경 처리 */
-      -webkit-tap-highlight-color: transparent;
-    }
-    /* 앱 컨테이너: 모바일에선 꽉 차고, PC/태블릿에선 큼직한 앱 화면처럼 중앙 정렬 */
-    .app-frame {
-      max-width: 640px;
-      margin: 0 auto;
-      min-height: 100vh;
-      background-color: #f8fafc;
-      box-shadow: 0 0 30px rgba(0,0,0,0.15);
-      display: flex;
-      flex-direction: column;
-    }
-    .modal-backdrop { display: none; }
-    .modal-backdrop.active { display: flex; }
-  </style>
-</head>
-<body class="text-slate-900">
+<!-- HTML 뼈대(body 부분까지)는 이전 답변과 동일하게 사용하세요 -->
 
-  <div class="app-frame pb-32 relative">
+  <script>
+    // ★ 여기에 구글 앱스 스크립트(GAS) 배포 후 얻은 웹앱 URL을 입력하세요.
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxtDrm_iFgk_05de0u3mbf4tOLA4kPm-WvDdsjOXEduf_0g3T-YuQ135BiSG-kFKrSV/exec';
 
-    <!-- 1. 상단 앱 헤더 (큼직한 글씨) -->
-    <header class="bg-emerald-800 text-white px-5 py-4 sticky top-0 z-20 shadow-md flex justify-between items-center">
-      <div class="flex items-center space-x-3">
-        <i class="fa-solid fa-camera text-emerald-300 text-2xl"></i>
-        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight">유통기한 사진 점검</h1>
-      </div>
-      <button type="button" onclick="fetchDataFromServer()" class="bg-emerald-700 active:bg-emerald-900 px-3.5 py-2 rounded-xl text-base font-bold flex items-center space-x-1.5 border border-emerald-600">
-        <i class="fa-solid fa-rotate-right"></i>
-        <span>새로고침</span>
-      </button>
-    </header>
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('input-date').value = today;
+    document.getElementById('filter-date').value = today;
 
-    <!-- 2. 메인 컨텐츠 영역 -->
-    <main class="p-4 space-y-5 flex-1">
+    let uploadQueue = [];
 
-      <!-- 날짜 선택 및 총 건수 요약 (왕글씨) -->
-      <section class="bg-white p-5 rounded-2xl shadow-sm border-2 border-slate-200 space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <label class="text-lg font-extrabold text-slate-700 flex items-center gap-2">
-            <i class="fa-regular fa-calendar-check text-emerald-600 text-xl"></i>
-            <span>조회 날짜 선택</span>
-          </label>
-          <div class="flex items-center gap-2">
-            <input type="date" id="filter-date" onchange="fetchDataFromServer()" class="flex-1 border-2 border-slate-300 rounded-xl px-4 py-2.5 text-lg font-bold text-slate-800 focus:border-emerald-600 outline-none">
-            <button type="button" onclick="setTodayFilter()" class="bg-slate-800 text-white px-4 py-2.5 rounded-xl text-base font-bold active:scale-95 transition">
-              오늘
-            </button>
-          </div>
-        </div>
-
-        <!-- 위치별 현황 요약 박스 -->
-        <div class="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-base font-bold text-emerald-900">등록된 사진 총 합계</span>
-            <span class="text-2xl font-black text-emerald-700"><span id="stat-total">0</span> 장</span>
-          </div>
-          <div id="stat-locations" class="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 text-base font-bold">
-            <!-- 위치별 건수 자동 표시 -->
-          </div>
-        </div>
-      </section>
-
-      <!-- 위치별 보기 탭 버튼 (터치하기 쉬운 왕버튼) -->
-      <section>
-        <p class="text-base font-extrabold text-slate-600 mb-2 px-1">위치별로 골라보기</p>
-        <div id="filter-location-tabs" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <!-- 자바스크립트에서 자동 생성 -->
-        </div>
-      </section>
-
-      <!-- 로딩 표시 -->
-      <div id="loading" class="hidden py-16 text-center">
-        <i class="fa-solid fa-spinner fa-spin text-5xl text-emerald-600"></i>
-        <p class="text-xl text-slate-700 mt-4 font-extrabold">사진을 불러오는 중입니다...</p>
-      </div>
-
-      <!-- 등록된 사진이 없을 때 -->
-      <div id="empty-state" class="hidden bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center my-4">
-        <i class="fa-regular fa-images text-6xl text-slate-300"></i>
-        <h3 class="mt-4 text-xl font-extrabold text-slate-700">등록된 사진이 없습니다</h3>
-        <p class="mt-2 text-base font-bold text-slate-500">아래의 초록색 [사진 찍기 / 올리기] 버튼을 눌러<br>오늘의 유통기한 사진을 등록해 주세요.</p>
-      </div>
-
-      <!-- 사진 목록 (큼직한 카드 형태) -->
-      <section id="photo-list" class="space-y-4"></section>
-
-    </main>
-
-    <!-- 3. 하단 고정 대형 액션 바 (어플 하단 탭바 스타일) -->
-    <div class="fixed bottom-0 left-0 right-0 z-20 pointer-events-none">
-      <div class="max-w-[640px] mx-auto p-4 bg-gradient-to-t from-slate-100 via-slate-100/95 to-transparent pointer-events-auto">
-        <button type="button" onclick="openUploadModal()" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white py-4 px-6 rounded-2xl shadow-xl flex items-center justify-center space-x-3 text-xl font-black border-2 border-emerald-500 transition cursor-pointer">
-          <i class="fa-solid fa-camera text-2xl"></i>
-          <span>사진 찍기 / 여러 장 올리기</span>
-        </button>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- ========================================================= -->
-  <!-- 4. 사진 등록 모달창 (전체화면 앱 스타일 & 다중 이미지 지원) -->
-  <!-- ========================================================= -->
-  <div id="upload-modal" class="modal-backdrop fixed inset-0 bg-slate-900/80 z-40 items-end sm:items-center justify-center">
-    <div class="bg-white w-full max-w-[640px] h-[92vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+    async function handleFiles(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
       
-      <!-- 모달 상단 헤더 -->
-      <div class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shrink-0">
-        <h2 class="text-xl font-extrabold flex items-center gap-2.5">
-          <i class="fa-solid fa-camera text-emerald-400"></i>
-          <span>사진 올리기</span>
-        </h2>
-        <button type="button" onclick="closeUploadModal()" class="bg-slate-700 text-white px-4 py-1.5 rounded-xl text-base font-bold">
-          닫기 ✕
-        </button>
-      </div>
-
-      <!-- 모달 본문 (스크롤 영역) -->
-      <div class="p-5 overflow-y-auto space-y-6 flex-1">
-        
-        <!-- 단계 1: 날짜 확인 -->
-        <div>
-          <label class="block text-lg font-extrabold text-slate-800 mb-2">1. 점검 날짜</label>
-          <input type="date" id="input-date" class="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-xl font-bold text-slate-900 focus:border-emerald-600 outline-none">
-        </div>
-
-        <!-- 단계 2: 위치 선택 (왕버튼) -->
-        <div>
-          <label class="block text-lg font-extrabold text-slate-800 mb-2">2. 위치를 선택하세요 (터치)</label>
-          <div id="modal-location-buttons" class="grid grid-cols-2 gap-3">
-            <!-- 자바스크립트에서 생성 -->
-          </div>
-        </div>
-
-        <!-- 단계 3: 사진 촬영 또는 여러 장 선택 -->
-        <div>
-          <div class="flex justify-between items-center mb-2">
-            <label class="text-lg font-extrabold text-slate-800">3. 사진 추가 (여러 장 가능)</label>
-            <span id="selected-count-badge" class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-base font-extrabold">현재 0장</span>
-          </div>
-
-          <!-- 카메라 / 앨범 큰 버튼 2개 -->
-          <div class="grid grid-cols-2 gap-3 mb-4">
-            <!-- 카메라 연속 촬영 버튼 -->
-            <div class="relative overflow-hidden bg-emerald-600 active:bg-emerald-800 text-white rounded-2xl py-5 px-3 flex flex-col items-center justify-center shadow-md cursor-pointer">
-              <i class="fa-solid fa-camera text-3xl mb-2"></i>
-              <span class="text-lg font-black">카메라로 찍기</span>
-              <span class="text-xs text-emerald-100 mt-1">찍은 후 계속 추가 가능</span>
-              <input type="file" id="input-camera" accept="image/*" capture="environment" onchange="handleFilesSelected(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-            </div>
-
-            <!-- 앨범에서 여러 장 한 번에 선택 버튼 -->
-            <div class="relative overflow-hidden bg-blue-600 active:bg-blue-800 text-white rounded-2xl py-5 px-3 flex flex-col items-center justify-center shadow-md cursor-pointer">
-              <i class="fa-regular fa-images text-3xl mb-2"></i>
-              <span class="text-lg font-black">앨범에서 선택</span>
-              <span class="text-xs text-blue-100 mt-1">한 번에 여러 장 선택</span>
-              <input type="file" id="input-gallery" accept="image/*" multiple onchange="handleFilesSelected(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-            </div>
-          </div>
-
-          <!-- 선택된 사진 미리보기 그리드 -->
-          <div id="preview-container" class="border-2 border-dashed border-slate-300 rounded-2xl p-4 bg-slate-50 min-h-[140px] flex flex-col justify-center">
-            <p id="preview-empty-text" class="text-center text-base font-bold text-slate-400 py-6">
-              위 버튼을 눌러 사진을 찍거나 골라주세요.<br>여러 장을 한꺼번에 올릴 수 있습니다.
-            </p>
-            <div id="preview-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 hidden"></div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- 모달 하단 전송 버튼 -->
-      <div class="p-4 bg-slate-100 border-t border-slate-200 shrink-0">
-        <button type="button" id="btn-submit" onclick="uploadAllImages()" class="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xl font-black shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50">
-          <span id="submit-text">선택한 사진 한번에 올리기</span>
-          <i id="submit-spinner" class="fa-solid fa-spinner fa-spin hidden text-2xl"></i>
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ========================================================= -->
-  <!-- 5. 사진 크게 보기 모달 (어르신용 초대형 확대창) -->
-  <!-- ========================================================= -->
-  <div id="lightbox-modal" onclick="closeLightbox()" class="modal-backdrop fixed inset-0 bg-black/95 z-50 flex-col justify-between p-4">
-    <div class="w-full max-w-[640px] mx-auto flex justify-between items-center bg-slate-900/90 p-3 rounded-2xl border border-slate-700" onclick="event.stopPropagation()">
-      <span id="lb-title" class="font-extrabold text-white text-lg px-2"></span>
-      <button type="button" onclick="closeLightbox()" class="bg-rose-600 text-white px-5 py-2 rounded-xl text-lg font-black">
-        닫기 ✕
-      </button>
-    </div>
-
-    <div class="flex-1 flex items-center justify-center overflow-hidden my-3" onclick="event.stopPropagation()">
-      <img id="lb-img" src="" class="max-h-full max-w-full rounded-xl object-contain" alt="확대 사진">
-    </div>
-
-    <div class="w-full max-w-[640px] mx-auto pb-2" onclick="event.stopPropagation()">
-      <a id="lb-drive-link" href="#" target="_blank" class="w-full bg-slate-800 text-white py-3.5 rounded-2xl text-lg font-bold flex items-center justify-center space-x-2 border border-slate-600">
-        <i class="fa-brands fa-google-drive text-emerald-400"></i>
-        <span>구글 드라이브 원본 열기</span>
-      </a>
-    </div>
-  </div>
-
-  <>
-    /**
-     * ====================================================================
-     * [필수 입력] 새로 배포한 Google Apps Script 웹 앱 URL을 아래에 붙여넣으세요!
-     * 예: 'https://script.google.com/macros/s/AKfycbx.../exec'
-     * ====================================================================
-     */
-    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbziQ9G8JD3w2VrwiLpgaBClNS04xEPmCz70cAWaUD6wgJy_IrnCM2vTYqXb2n78om_bvA/exec';
-
-    // 현장 위치 목록 (필요 시 수정)
-    const LOCATIONS = ['R3 테이크아웃존', 'R4 테이크아웃존', 'R5 테이크아웃존', '기타'];
-
-    // 리사이징 기준: 세로 800px
-    const TARGET_HEIGHT = 800;
-    const JPEG_QUALITY = 0.75;
-
-    let allRecords = [];
-    let selectedFilterLocation = 'ALL';
-    let selectedModalLocation = LOCATIONS[0];
-    let stagedImages = []; // 여러 장 업로드할 Base64 이미지 배열
-
-    // 앱 시작 시 초기화
-    window.addEventListener('DOMContentLoaded', () => {
-      const today = getTodayString();
-      document.getElementById('filter-date').value = today;
-      document.getElementById('input-date').value = today;
-
-      renderLocationTabs();
-      renderModalLocationButtons();
-      fetchDataFromServer();
-    });
-
-    function getTodayString() {
-      const now = new Date();
-      const offset = now.getTimezoneOffset() * 60000;
-      return new Date(now.getTime() - offset).toISOString().split('T')[0];
-    }
-
-    function setTodayFilter() {
-      document.getElementById('filter-date').value = getTodayString();
-      fetchDataFromServer();
-    }
-
-    // 메인 화면 위치별 탭 버튼 생성
-    function renderLocationTabs() {
-      const container = document.getElementById('filter-location-tabs');
-      container.innerHTML = '';
-
-      const tabs = ['ALL', ...LOCATIONS];
-      tabs.forEach(loc => {
-        const isSelected = (selectedFilterLocation === loc);
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.onclick = () => {
-          selectedFilterLocation = loc;
-          renderLocationTabs();
-          renderDashboard();
-        };
-        btn.className = `py-3 px-3 rounded-xl text-base font-extrabold border-2 transition ${
-          isSelected 
-            ? 'bg-slate-900 text-white border-slate-900 shadow-md' 
-            : 'bg-white text-slate-700 border-slate-300'
-        }`;
-        btn.textContent = loc === 'ALL' ? '전체 위치 보기' : loc;
-        container.appendChild(btn);
-      });
-    }
-
-    // 등록 모달창 안의 위치 선택 왕버튼 생성
-    function renderModalLocationButtons() {
-      const container = document.getElementById('modal-location-buttons');
-      container.innerHTML = '';
-
-      LOCATIONS.forEach(loc => {
-        const isSelected = (selectedModalLocation === loc);
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.onclick = () => {
-          selectedModalLocation = loc;
-          renderModalLocationButtons();
-        };
-        btn.className = `py-4 px-3 rounded-2xl text-lg font-black border-2 transition flex items-center justify-center space-x-1.5 ${
-          isSelected 
-            ? 'bg-emerald-600 text-white border-emerald-700 shadow-md' 
-            : 'bg-slate-100 text-slate-700 border-slate-300'
-        }`;
-        btn.innerHTML = `
-          ${isSelected ? '<i class="fa-solid fa-circle-check"></i>' : ''}
-          <span>${loc}</span>
-        `;
-        container.appendChild(btn);
-      });
-    }
-
-    // 깃허브에서 GAS 서버로 데이터 요청 (fetch GET)
-    async function fetchDataFromServer() {
-      if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.includes('여기에_')) {
-        alert('index.html 코드 하단의 GAS_WEB_APP_URL 변수에 구글 앱스 스크립트 웹앱 주소를 먼저 입력해 주세요.');
-        return;
-      }
-
-      const dateVal = document.getElementById('filter-date').value || 'ALL';
       showLoading(true);
-
-      try {
-        const response = await fetch(`${GAS_WEB_APP_URL}?date=${encodeURIComponent(dateVal)}`);
-        const res = await response.json();
-        showLoading(false);
-
-        if (res.success) {
-          allRecords = res.data || [];
-          renderDashboard();
-        } else {
-          alert('데이터 불러오기 오류: ' + res.message);
-        }
-      } catch (err) {
-        showLoading(false);
-        alert('서버와 연결할 수 없습니다. 웹앱 배포 주소와 권한(모든 사용자)을 확인해 주세요.');
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const base64Data = await resizeImage(file);
+        
+        uploadQueue.push({
+          id: Date.now() + i,
+          base64Data: base64Data,
+          fileName: `${document.getElementById('input-date').value}_${file.name}`,
+          memo: '',
+          status: '정상'
+        });
       }
-    }
-
-    // 화면에 사진 목록 및 요약 표시
-    function renderDashboard() {
-      // 1. 전체 요약 건수 업데이트
-      document.getElementById('stat-total').textContent = allRecords.length;
-
-      const locCounts = {};
-      LOCATIONS.forEach(l => locCounts[l] = 0);
-      allRecords.forEach(d => {
-        locCounts[d.location] = (locCounts[d.location] || 0) + 1;
-      });
-
-      const locBox = document.getElementById('stat-locations');
-      locBox.innerHTML = '';
-      Object.entries(locCounts).forEach(([loc, cnt]) => {
-        const div = document.createElement('div');
-        div.className = 'flex justify-between items-center bg-white px-3 py-2 rounded-lg border border-emerald-200';
-        div.innerHTML = `
-          <span class="text-slate-700">${loc}</span>
-          <span class="${cnt > 0 ? 'text-emerald-700 font-black' : 'text-slate-400'}">${cnt}장</span>
-        `;
-        locBox.appendChild(div);
-      });
-
-      // 2. 위치 필터 적용하여 사진 카드 렌더링
-      const filtered = allRecords.filter(item => {
-        return selectedFilterLocation === 'ALL' || item.location === selectedFilterLocation;
-      });
-
-      const listEl = document.getElementById('photo-list');
-      const emptyEl = document.getElementById('empty-state');
-      listEl.innerHTML = '';
-
-      if (filtered.length === 0) {
-        emptyEl.classList.remove('hidden');
-        return;
-      }
-
-      emptyEl.classList.add('hidden');
-
-      filtered.forEach(item => {
-        const thumbUrl = `https://drive.google.com/thumbnail?id=${item.fileId}&sz=w1000`;
-        const card = document.createElement('div');
-        card.className = 'bg-white rounded-2xl shadow-sm border-2 border-slate-200 overflow-hidden';
-        card.innerHTML = `
-          <div class="p-4 flex justify-between items-center bg-slate-50 border-b border-slate-200">
-            <span class="text-lg font-black text-slate-900 flex items-center gap-2">
-              <i class="fa-solid fa-location-dot text-emerald-600"></i>
-              ${escapeHtml(item.location)}
-            </span>
-            <span class="text-base font-bold text-slate-600">${item.timestamp.slice(5, 16)}</span>
-          </div>
-          <div class="relative bg-slate-100 cursor-pointer" onclick="openLightbox('${item.fileId}', '${escapeHtml(item.location)}', '${item.timestamp.slice(5, 16)}', '${item.fileUrl}')">
-            <img src="${thumbUrl}" loading="lazy" class="w-full max-h-[420px] object-contain mx-auto" alt="유통기한 사진">
-            <div class="bg-slate-900/75 text-white text-center py-2.5 text-base font-bold">
-              <i class="fa-solid fa-magnifying-glass-plus mr-1"></i> 사진을 터치하면 크게 보입니다
-            </div>
-          </div>
-        `;
-        listEl.appendChild(card);
-      });
-    }
-
-    // ====================================================================
-    // 다중 사진 선택 및 세로 800px 리사이징 처리
-    // ====================================================================
-    async function handleFilesSelected(event) {
-      const files = Array.from(event.target.files);
-      if (files.length === 0) return;
-
-      for (const file of files) {
-        const resizedDataUrl = await resizeSingleImage(file);
-        if (resizedDataUrl) {
-          stagedImages.push(resizedDataUrl);
-        }
-      }
-
-      // 같은 파일 다시 선택 가능하도록 초기화
+      renderPreviewList();
+      showLoading(false);
       event.target.value = '';
-      renderStagedPreviews();
     }
 
-    function resizeSingleImage(file) {
+    function resizeImage(file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = (e) => {
           const img = new Image();
-          img.onload = function() {
+          img.onload = () => {
             const canvas = document.createElement('canvas');
-            const scaleFactor = TARGET_HEIGHT / img.height;
-            canvas.height = TARGET_HEIGHT;
-            canvas.width = Math.round(img.width * scaleFactor);
-
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+            const targetHeight = 800;
+            const targetWidth = Math.floor(img.width * (targetHeight / img.height));
+            
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+            
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
           };
-          img.onerror = () => resolve(null);
           img.src = e.target.result;
         };
-        reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
       });
     }
 
-    // 모달창 내 선택된 여러 장의 사진 미리보기 렌더링
-    function renderStagedPreviews() {
-      const countBadge = document.getElementById('selected-count-badge');
-      const emptyText = document.getElementById('preview-empty-text');
-      const grid = document.getElementById('preview-grid');
-      const submitText = document.getElementById('submit-text');
+    function renderPreviewList() {
+      // (이전 답변의 renderPreviewList 함수 내용과 동일)
+      const container = document.getElementById('preview-list');
+      const submitBtn = document.getElementById('btn-submit');
+      container.innerHTML = '';
+      
+      if (uploadQueue.length > 0) submitBtn.classList.remove('hidden');
+      else submitBtn.classList.add('hidden');
 
-      countBadge.textContent = `현재 ${stagedImages.length}장`;
-      submitText.textContent = stagedImages.length > 0 
-        ? `사진 ${stagedImages.length}장 한번에 올리기` 
-        : '선택한 사진 한번에 올리기';
-
-      if (stagedImages.length === 0) {
-        emptyText.classList.remove('hidden');
-        grid.classList.add('hidden');
-        grid.innerHTML = '';
-        return;
-      }
-
-      emptyText.classList.add('hidden');
-      grid.classList.remove('hidden');
-      grid.innerHTML = '';
-
-      stagedImages.forEach((base64, idx) => {
-        const item = document.createElement('div');
-        item.className = 'relative rounded-xl overflow-hidden border-2 border-slate-300 bg-black h-32';
-        item.innerHTML = `
-          <img src="${base64}" class="w-full h-full object-cover">
-          <span class="absolute bottom-1 left-1 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded">${idx + 1}번</span>
-          <button type="button" onclick="removeStagedImage(${idx})" class="absolute top-1 right-1 bg-rose-600 text-white font-black text-sm px-2.5 py-1 rounded-lg shadow">
-            삭제 ✕
-          </button>
+      uploadQueue.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = "bg-white p-4 rounded-2xl shadow-sm border-2 border-gray-100 flex gap-4";
+        card.innerHTML = `
+          <div class="w-1/3 flex-shrink-0 relative">
+            <img src="${item.base64Data}" class="w-full h-32 object-cover rounded-xl border border-gray-200">
+            <button onclick="removeItem(${item.id})" class="absolute -top-2 -right-2 bg-red-500 text-white w-8 h-8 rounded-full shadow font-bold">X</button>
+          </div>
+          <div class="w-2/3 flex flex-col justify-between">
+            <input type="text" placeholder="제품명 / 특이사항 (터치)" 
+                   class="w-full text-lg p-3 border-b-2 border-gray-300 focus:border-blue-500 outline-none bg-gray-50 rounded-t-lg"
+                   onchange="updateQueueData(${item.id}, 'memo', this.value)" value="${item.memo}">
+            <div class="flex gap-2 mt-2">
+              <button onclick="updateStatus(${item.id}, '정상')" class="status-btn flex-1 py-2 rounded-xl text-lg font-bold border-2 ${item.status === '정상' ? 'bg-green-100 border-green-500 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}">정상</button>
+              <button onclick="updateStatus(${item.id}, '임박')" class="status-btn flex-1 py-2 rounded-xl text-lg font-bold border-2 ${item.status === '임박' ? 'bg-yellow-100 border-yellow-500 text-yellow-700' : 'bg-gray-100 border-gray-200 text-gray-500'}">임박</button>
+              <button onclick="updateStatus(${item.id}, '폐기대상')" class="status-btn flex-1 py-2 rounded-xl text-lg font-bold border-2 ${item.status === '폐기대상' ? 'bg-red-100 border-red-500 text-red-700' : 'bg-gray-100 border-gray-200 text-gray-500'}">폐기</button>
+            </div>
+          </div>
         `;
-        grid.appendChild(item);
+        container.appendChild(card);
       });
     }
 
-    function removeStagedImage(index) {
-      stagedImages.splice(index, 1);
-      renderStagedPreviews();
+    function updateQueueData(id, key, value) {
+      const item = uploadQueue.find(q => q.id === id);
+      if (item) item[key] = value;
     }
 
-    // 깃허브에서 GAS 서버로 여러 장의 사진 전송 (fetch POST)
-    async function uploadAllImages() {
-      if (stagedImages.length === 0) {
-        alert('먼저 [카메라로 찍기] 또는 [앨범에서 선택]을 눌러 사진을 추가해 주세요!');
+    function updateStatus(id, statusStr) {
+      updateQueueData(id, 'status', statusStr);
+      renderPreviewList();
+    }
+
+    function removeItem(id) {
+      uploadQueue = uploadQueue.filter(q => q.id !== id);
+      renderPreviewList();
+    }
+
+    // ★ fetch API를 활용한 데이터 서버 전송
+    async function submitData() {
+      if (uploadQueue.length === 0) return;
+      if (GAS_URL.includes('여기에_복사한_키를_넣어주세요')) {
+        alert("코드 상단에 GAS 웹앱 URL을 먼저 입력해주세요!");
         return;
       }
+      
+      const dateStr = document.getElementById('input-date').value;
+      const locationStr = document.getElementById('input-location').value;
+      
+      const payload = uploadQueue.map(item => ({
+        date: dateStr,
+        location: locationStr,
+        memo: item.memo || '메모 없음',
+        status: item.status,
+        base64Data: item.base64Data,
+        fileName: `${dateStr}_${locationStr}_${item.status}.jpg`
+      }));
 
-      const checkDate = document.getElementById('input-date').value;
-      const btnSubmit = document.getElementById('btn-submit');
-      const submitText = document.getElementById('submit-text');
-      const submitSpinner = document.getElementById('submit-spinner');
-
-      btnSubmit.disabled = true;
-      submitText.textContent = `${stagedImages.length}장 저장 중... 잠시만 기다려주세요`;
-      submitSpinner.classList.remove('hidden');
-
-      const payload = {
-        checkDate: checkDate,
-        location: selectedModalLocation,
-        images: stagedImages
-      };
-
+      showLoading(true);
+      
       try {
-        // CORS preflight 방지를 위해 text/plain 헤더로 JSON 문자열 전송
-        const response = await fetch(GAS_WEB_APP_URL, {
+        // CORS Preflight 우회를 위해 text/plain 속성으로 POST 전송
+        const response = await fetch(GAS_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(payload)
         });
-
+        
         const res = await response.json();
-
-        btnSubmit.disabled = false;
-        submitSpinner.classList.add('hidden');
-
+        
+        showLoading(false);
         if (res.success) {
-          alert(`총 ${stagedImages.length}장의 사진이 성공적으로 등록되었습니다!`);
-          closeUploadModal();
-          document.getElementById('filter-date').value = checkDate;
-          fetchDataFromServer();
+          alert(`총 ${res.count}건의 점검 사진이 성공적으로 업로드 되었습니다.`);
+          uploadQueue = [];
+          renderPreviewList();
+          switchTab('dashboard');
         } else {
-          submitText.textContent = `사진 ${stagedImages.length}장 한번에 올리기`;
-          alert('업로드 실패: ' + res.message);
+          alert('업로드 실패: ' + res.error);
         }
       } catch (err) {
-        btnSubmit.disabled = false;
-        submitSpinner.classList.add('hidden');
-        submitText.textContent = `사진 ${stagedImages.length}장 한번에 올리기`;
-        alert('전송 중 오류가 발생했습니다. 인터넷 연결이나 웹앱 주소를 확인해 주세요.');
+        showLoading(false);
+        alert('네트워크 오류가 발생했습니다: ' + err.message);
       }
     }
 
-    // 모달 열기/닫기
-    function openUploadModal() {
-      document.getElementById('upload-modal').classList.add('active');
+    // ★ fetch API를 활용한 대시보드 데이터 조회
+    async function loadDashboard() {
+      if (GAS_URL.includes('여기에_복사한_키를_넣어주세요')) return;
+
+      const filterDate = document.getElementById('filter-date').value;
+      const container = document.getElementById('dashboard-list');
+      container.innerHTML = '<div class="text-center p-10 text-gray-500 text-xl font-bold"><i class="fa-solid fa-spinner fa-spin mr-2"></i>불러오는 중...</div>';
+      
+      try {
+        const response = await fetch(`${GAS_URL}?action=getRecords&date=${filterDate}`);
+        const res = await response.json();
+        
+        if (res.success) {
+          renderDashboard(res.data);
+        } else {
+          container.innerHTML = `<div class="text-center p-10 text-red-500 font-bold">오류: ${res.message}</div>`;
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="text-center p-10 text-red-500 font-bold">데이터를 불러오지 못했습니다.</div>`;
+      }
     }
 
-    function closeUploadModal() {
-      document.getElementById('upload-modal').classList.remove('active');
-      stagedImages = [];
-      renderStagedPreviews();
-    }
+    function renderDashboard(records) {
+      // (이전 답변의 renderDashboard 함수 내용과 완전히 동일)
+      const container = document.getElementById('dashboard-list');
+      container.innerHTML = '';
+      let issueCount = 0;
 
-    function openLightbox(fileId, location, time, fileUrl) {
-      document.getElementById('lb-img').src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
-      document.getElementById('lb-title').textContent = `${location} (${time})`;
-      document.getElementById('lb-drive-link').href = fileUrl;
-      document.getElementById('lightbox-modal').classList.add('active');
-    }
-
-    function closeLightbox() {
-      document.getElementById('lightbox-modal').classList.remove('active');
-      document.getElementById('lb-img').src = '';
-    }
-
-    function showLoading(isLoading) {
-      const loader = document.getElementById('loading');
-      if (isLoading) {
-        loader.classList.remove('hidden');
+      if (records.length === 0) {
+        container.innerHTML = '<div class="bg-white p-10 rounded-2xl shadow-sm text-center text-gray-500 text-xl font-bold">해당 날짜에 점검 기록이 없습니다.</div>';
       } else {
-        loader.classList.add('hidden');
+        records.forEach(item => {
+          if (item.status === '임박' || item.status === '폐기대상') issueCount++;
+          const thumbUrl = `https://drive.google.com/thumbnail?id=${item.fileId}&sz=w800`;
+          
+          let statusBadge = '';
+          if(item.status === '정상') statusBadge = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-bold border border-green-200">정상</span>';
+          if(item.status === '임박') statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-lg text-sm font-bold border border-yellow-200">임박</span>';
+          if(item.status === '폐기대상') statusBadge = '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-sm font-bold border border-red-200">폐기대상</span>';
+
+          const card = document.createElement('div');
+          card.className = "bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col";
+          card.innerHTML = `
+            <div class="h-48 w-full bg-gray-100 relative cursor-pointer" onclick="openImageModal('${thumbUrl}', '${item.fileUrl}')">
+              <img src="${thumbUrl}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/800x400?text=Image+Not+Found'">
+              <div class="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-sm">
+                <i class="fa-solid fa-magnifying-glass mr-1"></i>확대
+              </div>
+            </div>
+            <div class="p-4 space-y-2">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-500 font-bold text-lg"><i class="fa-solid fa-location-dot mr-1"></i>${item.location}</span>
+                ${statusBadge}
+              </div>
+              <p class="text-xl font-black text-gray-800 break-words">${item.memo}</p>
+              <p class="text-sm text-gray-400 text-right">${item.timestamp}</p>
+            </div>
+          `;
+          container.appendChild(card);
+        });
       }
+      document.getElementById('sum-total').innerHTML = `${records.length}<span class="text-xl font-normal ml-1">건</span>`;
+      document.getElementById('sum-issue').innerHTML = `${issueCount}<span class="text-xl font-normal ml-1 text-gray-800">건</span>`;
     }
 
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    // (이하 showLoading, switchTab, openImageModal, closeImageModal 함수는 이전과 동일)
+    function showLoading(show) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; }
+    function switchTab(tab) {
+      document.getElementById('tab-upload').classList.add('hidden');
+      document.getElementById('tab-dashboard').classList.add('hidden');
+      document.getElementById(`tab-${tab}`).classList.remove('hidden');
+      const navUpload = document.getElementById('nav-upload');
+      const navDash = document.getElementById('nav-dashboard');
+      if(tab === 'upload') {
+        navUpload.className = "flex-1 flex flex-col items-center p-2 text-blue-600 font-bold transition scale-110";
+        navDash.className = "flex-1 flex flex-col items-center p-2 text-gray-400 font-bold transition";
+        window.scrollTo(0,0);
+      } else {
+        navDash.className = "flex-1 flex flex-col items-center p-2 text-blue-600 font-bold transition scale-110";
+        navUpload.className = "flex-1 flex flex-col items-center p-2 text-gray-400 font-bold transition";
+        if(document.getElementById('dashboard-list').innerHTML.trim() === '') loadDashboard();
+        window.scrollTo(0,0);
+      }
+    }
+    function openImageModal(imgSrc, originalUrl) {
+      document.getElementById('modal-img').src = imgSrc;
+      document.getElementById('modal-link').href = originalUrl;
+      document.getElementById('image-modal').classList.remove('hidden');
+    }
+    function closeImageModal() {
+      document.getElementById('image-modal').classList.add('hidden');
+      document.getElementById('modal-img').src = '';
     }
   </script>
-</body>
-</html>
