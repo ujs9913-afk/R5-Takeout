@@ -1,248 +1,1143 @@
-<!-- HTML 뼈대(body 부분까지)는 이전 답변과 동일하게 사용하세요 -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="유통기한점검" />
+  <title>테이크아웃 유통기한 관리 앱</title>
 
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Pretendard 폰트 (가독성 극대화) -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+  <style>
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      -webkit-tap-highlight-color: transparent;
+      word-break: keep-all;
+    }
+    /* 시니어 친화적 큰 스크롤바 및 터치 영역 */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .safe-bottom { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+    .app-shadow { box-shadow: 0 -4px 20px -2px rgba(15, 23, 42, 0.12); }
+  </style>
+</head>
+<body class="min-h-screen safe-bottom select-none">
+
+  <!-- =========================================================
+       상단 고정 앱 헤더 (네이티브 앱 스타일)
+  ========================================================== -->
+  <header class="sticky top-0 z-30 bg-blue-900 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-blue-700 flex items-center justify-center text-2xl shadow-inner">
+          <i class="fa-solid fa-camera-retro text-yellow-300"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight leading-none">테이크아웃 유통기한 점검</h1>
+          <p id="envBadge" class="text-sm md:text-base text-blue-200 font-medium mt-1">실시간 라벨 사진 관리 시스템</p>
+        </div>
+      </div>
+
+      <button onclick="loadDashboardData()" class="flex items-center gap-2 bg-blue-800 hover:bg-blue-700 active:scale-95 text-white px-4 py-3 rounded-2xl border border-blue-600 font-bold text-lg shadow">
+        <i id="refreshIcon" class="fa-solid fa-rotate-right text-xl"></i>
+        <span class="hidden sm:inline">새로고침</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 메인 컨테이너 (폴더블/태블릿/데스크톱 대응) -->
+  <main class="max-w-6xl mx-auto px-4 pt-5 space-y-6">
+
+    <!-- =========================================================
+         날짜 빠른 선택 바 (어제 / 오늘 / 전체 / 직접선택)
+    ========================================================== -->
+    <section class="bg-white rounded-3xl p-4 md:p-5 shadow-md border-2 border-slate-200">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="bg-blue-100 text-blue-900 font-extrabold px-4 py-2 rounded-xl text-lg md:text-xl">
+            <i class="fa-regular fa-calendar-check mr-1"></i> 조회 날짜
+          </span>
+          <input type="date" id="filterDateInput" onchange="onDateFilterChange(this.value)"
+            class="border-2 border-slate-300 rounded-2xl px-4 py-2.5 text-xl md:text-2xl font-extrabold text-slate-900 focus:border-blue-600 focus:outline-none bg-slate-50" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-2.5">
+          <button onclick="setQuickDate('YESTERDAY')" id="btnDateYesterday"
+            class="py-3 px-4 rounded-2xl font-extrabold text-lg md:text-xl border-2 border-slate-300 bg-white text-slate-700 active:scale-95">
+            어제
+          </button>
+          <button onclick="setQuickDate('TODAY')" id="btnDateToday"
+            class="py-3 px-4 rounded-2xl font-extrabold text-lg md:text-xl border-2 border-blue-600 bg-blue-600 text-white shadow active:scale-95">
+            오늘
+          </button>
+          <button onclick="setQuickDate('ALL')" id="btnDateAll"
+            class="py-3 px-4 rounded-2xl font-extrabold text-lg md:text-xl border-2 border-slate-300 bg-white text-slate-700 active:scale-95">
+            전체보기
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         상단 요약 카드 (Summary Cards - 큼직한 글씨)
+    ========================================================== -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- 1. 총 점검 건수 -->
+      <div class="bg-white rounded-3xl p-5 shadow-md border-l-8 border-blue-600 flex items-center justify-between">
+        <div>
+          <p class="text-lg md:text-xl font-bold text-slate-500">총 점검 사진 건수</p>
+          <p class="text-4xl md:text-5xl font-black text-slate-900 mt-2"><span id="sumTotal">0</span><span class="text-2xl font-bold ml-1">건</span></p>
+        </div>
+        <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl">
+          <i class="fa-solid fa-clipboard-check"></i>
+        </div>
+      </div>
+
+      <!-- 2. 특이사항 (임박/폐기) 건수 -->
+      <div class="bg-white rounded-3xl p-5 shadow-md border-l-8 border-red-600 flex items-center justify-between">
+        <div>
+          <p class="text-lg md:text-xl font-bold text-slate-500">특이사항 (임박·폐기)</p>
+          <p class="text-4xl md:text-5xl font-black text-red-600 mt-2"><span id="sumAlert">0</span><span class="text-2xl font-bold ml-1">건</span></p>
+        </div>
+        <div class="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center text-3xl">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+      </div>
+
+      <!-- 3. 위치별 점검 현황 -->
+      <div class="bg-white rounded-3xl p-5 shadow-md border-l-8 border-emerald-600">
+        <p class="text-lg md:text-xl font-bold text-slate-500 mb-3">구역별 점검 현황</p>
+        <div id="sumLocationBadges" class="grid grid-cols-2 gap-2">
+          <!-- JS에서 동적 렌더링 -->
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         필터 탭 (위치별 / 상태별 / 뷰 전환) - 한 번의 터치로 필터링
+    ========================================================== -->
+    <section class="bg-white rounded-3xl p-5 shadow-md border-2 border-slate-200 space-y-4">
+      <!-- 구역 필터 버튼 -->
+      <div>
+        <label class="block text-lg font-extrabold text-slate-600 mb-2">
+          <i class="fa-solid fa-location-dot text-blue-600 mr-1"></i> 구역 선택 보기
+        </label>
+        <div id="locationFilterBar" class="flex flex-wrap gap-2.5">
+          <!-- JS 동적 생성 -->
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <!-- 유통기한 상태 필터 버튼 -->
+        <div>
+          <label class="block text-lg font-extrabold text-slate-600 mb-2">
+            <i class="fa-solid fa-tags text-blue-600 mr-1"></i> 상태별 보기
+          </label>
+          <div id="statusFilterBar" class="flex flex-wrap gap-2.5">
+            <button onclick="setStatusFilter('ALL')" data-status="ALL" class="status-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-800 bg-slate-800 text-white">전체</button>
+            <button onclick="setStatusFilter('정상')" data-status="정상" class="status-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-300 bg-white text-emerald-700">🟢 정상</button>
+            <button onclick="setStatusFilter('임박')" data-status="임박" class="status-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-300 bg-white text-amber-700">🟡 임박</button>
+            <button onclick="setStatusFilter('폐기대상')" data-status="폐기대상" class="status-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-300 bg-white text-red-700">🔴 폐기대상</button>
+          </div>
+        </div>
+
+        <!-- 보기 방식 전환 (사진 크게 보기 vs 표로 보기) -->
+        <div>
+          <label class="block text-lg font-extrabold text-slate-600 mb-2">화면 보기 방식</label>
+          <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-300">
+            <button id="btnViewCard" onclick="setViewMode('CARD')" class="px-5 py-3 rounded-xl font-extrabold text-lg bg-blue-600 text-white shadow flex items-center justify-center gap-2">
+              <i class="fa-solid fa-table-cells-large"></i> 사진 크게 보기
+            </button>
+            <button id="btnViewTable" onclick="setViewMode('TABLE')" class="px-5 py-3 rounded-xl font-extrabold text-lg text-slate-700 flex items-center justify-center gap-2">
+              <i class="fa-solid fa-list-ul"></i> 표로 보기
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         실시간 점검 목록 영역 (카드 갤러리 뷰 / 테이블 뷰)
+    ========================================================== -->
+    <section>
+      <!-- 로딩 상태 표시 -->
+      <div id="loadingBox" class="hidden bg-white rounded-3xl p-12 text-center shadow-md border-2 border-slate-200">
+        <i class="fa-solid fa-circle-notch fa-spin text-5xl text-blue-600 mb-4"></i>
+        <p class="text-2xl font-extrabold text-slate-800">데이터를 불러오는 중입니다...</p>
+      </div>
+
+      <!-- 데이터 없음 표시 -->
+      <div id="emptyBox" class="hidden bg-white rounded-3xl p-12 text-center shadow-md border-2 border-dashed border-slate-300">
+        <div class="w-20 h-20 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-4xl mx-auto mb-4">
+          <i class="fa-regular fa-images"></i>
+        </div>
+        <p class="text-2xl font-extrabold text-slate-700">등록된 유통기한 점검 사진이 없습니다.</p>
+        <p class="text-lg text-slate-500 mt-2">화면 아래의 <strong class="text-blue-700">[+ 라벨 사진 등록하기]</strong> 버튼을 눌러 사진을 올려주세요.</p>
+      </div>
+
+      <!-- 1. 카드형 갤러리 뷰 (폴더블/태블릿 2~3열 자동 그리드) -->
+      <div id="cardGalleryView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- JS 동적 렌더링 -->
+      </div>
+
+      <!-- 2. 테이블 뷰 -->
+      <div id="tableView" class="hidden bg-white rounded-3xl shadow-md border-2 border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-800 text-white text-lg md:text-xl">
+                <th class="py-4 px-4 font-extrabold">라벨 사진</th>
+                <th class="py-4 px-4 font-extrabold">상태</th>
+                <th class="py-4 px-4 font-extrabold">위치(구역)</th>
+                <th class="py-4 px-4 font-extrabold">제품명 / 메모</th>
+                <th class="py-4 px-4 font-extrabold">등록 시간</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody" class="divide-y divide-slate-200 text-lg md:text-xl font-bold">
+              <!-- JS 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =========================================================
+       하단 고정 네비게이션 & 대형 촬영 버튼 (모바일 앱 스타일)
+  ========================================================== -->
+  <div class="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t-2 border-slate-200 app-shadow px-4 py-3">
+    <div class="max-w-4xl mx-auto flex items-center gap-3">
+      <button onclick="openUploadModal()"
+        class="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-2xl py-4 px-6 rounded-2xl shadow-lg flex items-center justify-center gap-3 border-b-4 border-blue-800">
+        <i class="fa-solid fa-camera text-3xl text-yellow-300"></i>
+        <span>+ 유통기한 라벨 사진 등록하기</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       데이터 입력 모달 (다중 사진 촬영/첨부 & 큰 글씨 폼)
+  ========================================================== -->
+  <div id="uploadModal" class="fixed inset-0 z-50 hidden bg-slate-900/80 backdrop-blur-sm overflow-y-auto">
+    <div class="min-h-screen px-3 py-6 flex items-center justify-center">
+      <div class="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border-2 border-slate-300 overflow-hidden">
+
+        <!-- 모달 헤더 -->
+        <div class="bg-blue-900 text-white px-6 py-5 flex items-center justify-between">
+          <h2 class="text-2xl md:text-3xl font-black flex items-center gap-3">
+            <i class="fa-solid fa-camera text-yellow-300"></i>
+            <span>라벨 사진 등록</span>
+          </h2>
+          <button onclick="closeUploadModal()" class="w-12 h-12 rounded-2xl bg-blue-800 hover:bg-blue-700 text-2xl flex items-center justify-center">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- 모달 바디 -->
+        <div class="p-5 md:p-6 space-y-6">
+
+          <!-- 1. 날짜 선택 -->
+          <div>
+            <label class="block text-xl font-black text-slate-800 mb-2">1. 점검 날짜</label>
+            <input type="date" id="formDate"
+              class="w-full border-2 border-slate-400 rounded-2xl px-4 py-3.5 text-2xl font-extrabold text-slate-900 bg-slate-50 focus:border-blue-600 focus:outline-none" />
+          </div>
+
+          <!-- 2. 위치 선택 (큼직한 터치 버튼) -->
+          <div>
+            <label class="block text-xl font-black text-slate-800 mb-2">2. 위치 (구역 선택)</label>
+            <div id="formLocationGrid" class="grid grid-cols-2 gap-3">
+              <!-- JS 상단 배열에서 자동 생성 -->
+            </div>
+          </div>
+
+          <!-- 3. 유통기한 상태 선택 (신호등 컬러 대형 버튼) -->
+          <div>
+            <label class="block text-xl font-black text-slate-800 mb-2">3. 유통기한 상태</label>
+            <div class="grid grid-cols-3 gap-3">
+              <button type="button" onclick="selectFormStatus('정상')" data-val="정상"
+                class="form-status-btn py-4 px-3 rounded-2xl font-black text-xl border-4 border-emerald-600 bg-emerald-600 text-white shadow flex flex-col items-center gap-1">
+                <span class="text-2xl">🟢</span>
+                <span>정상</span>
+              </button>
+              <button type="button" onclick="selectFormStatus('임박')" data-val="임박"
+                class="form-status-btn py-4 px-3 rounded-2xl font-black text-xl border-2 border-slate-300 bg-white text-slate-700 flex flex-col items-center gap-1">
+                <span class="text-2xl">🟡</span>
+                <span>임박</span>
+              </button>
+              <button type="button" onclick="selectFormStatus('폐기대상')" data-val="폐기대상"
+                class="form-status-btn py-4 px-3 rounded-2xl font-black text-xl border-2 border-slate-300 bg-white text-slate-700 flex flex-col items-center gap-1">
+                <span class="text-2xl">🔴</span>
+                <span>폐기대상</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. 사진 촬영 / 여러 장 선택 -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xl font-black text-slate-800">4. 라벨 사진 (여러 장 가능)</label>
+              <span id="photoCountBadge" class="bg-blue-100 text-blue-900 font-black px-3 py-1 rounded-xl text-lg">0장 선택됨</span>
+            </div>
+
+            <!-- 숨겨진 파일 Input 2개: 1) 카메라 즉시 실행용, 2) 앨범 다중 선택용 -->
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleFilesSelected(this.files)" />
+            <input type="file" id="galleryInput" accept="image/*" multiple class="hidden" onchange="handleFilesSelected(this.files)" />
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button type="button" onclick="document.getElementById('cameraInput').click()"
+                class="py-5 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-xl shadow flex items-center justify-center gap-3">
+                <i class="fa-solid fa-camera text-2xl text-yellow-300"></i>
+                <span>카메라로 바로 찍기</span>
+              </button>
+
+              <button type="button" onclick="document.getElementById('galleryInput').click()"
+                class="py-5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-900 active:scale-95 text-white font-black text-xl shadow flex items-center justify-center gap-3">
+                <i class="fa-regular fa-images text-2xl text-emerald-300"></i>
+                <span>사진첩에서 여러 장 선택</span>
+              </button>
+            </div>
+            <p class="text-base text-slate-600 font-semibold mt-2">
+              💡 <strong>[카메라로 바로 찍기]</strong>를 여러 번 눌러 사진을 계속 추가하거나, <strong>[사진첩에서 여러 장 선택]</strong>으로 한 번에 올릴 수 있습니다. (세로 800px 자동 압축)
+            </p>
+
+            <!-- 선택된 사진 프리뷰 그리드 -->
+            <div id="previewContainer" class="hidden mt-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-lg font-extrabold text-slate-700">첨부된 사진 미리보기</span>
+                <button type="button" onclick="clearSelectedPhotos()" class="text-red-600 font-extrabold text-lg underline">전체 지우기</button>
+              </div>
+              <div id="previewGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <!-- JS 프리뷰 썸네일 렌더링 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. 제품명 / 메모 (빠른 태그 버튼 포함) -->
+          <div>
+            <label class="block text-xl font-black text-slate-800 mb-2">5. 제품명 / 메모 (선택)</label>
+            <input type="text" id="formMemo" placeholder="예: 닭가슴살 샐러드, 샌드위치 등"
+              class="w-full border-2 border-slate-400 rounded-2xl px-4 py-4 text-xl font-bold text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none" />
+            <!-- 터치 한 번으로 입력되는 상용구 버튼 -->
+            <div class="flex flex-wrap gap-2 mt-2.5">
+              <button type="button" onclick="setQuickMemo('샐러드팩')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-base border border-slate-300">+ 샐러드팩</button>
+              <button type="button" onclick="setQuickMemo('샌드위치/김밥')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-base border border-slate-300">+ 샌드위치/김밥</button>
+              <button type="button" onclick="setQuickMemo('과일컵/요거트')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-base border border-slate-300">+ 과일컵/요거트</button>
+              <button type="button" onclick="setQuickMemo('음료/유제품')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-base border border-slate-300">+ 음료/유제품</button>
+              <button type="button" onclick="setQuickMemo('도시락/간편식')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-base border border-slate-300">+ 도시락/간편식</button>
+            </div>
+          </div>
+
+          <!-- 제출 버튼 -->
+          <div class="pt-2">
+            <button type="button" id="submitBtn" onclick="submitInspection()"
+              class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white font-black text-2xl py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3 border-b-4 border-emerald-800">
+              <i class="fa-solid fa-cloud-arrow-up text-3xl"></i>
+              <span id="submitBtnText">점검 완료 및 사진 올리기</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       이미지 확대 라이트박스 모달 (유통기한 숫자 크게 확인용)
+  ========================================================== -->
+  <div id="lightboxModal" class="fixed inset-0 z-50 hidden bg-black/95 flex flex-col justify-between p-3 md:p-6">
+    <!-- 상단 바 -->
+    <div class="flex items-center justify-between text-white bg-slate-900/90 px-4 py-3 rounded-2xl border border-slate-700">
+      <div>
+        <div class="flex items-center gap-2">
+          <span id="lbStatusBadge" class="px-3 py-1 rounded-lg font-black text-base">정상</span>
+          <span id="lbLocation" class="font-extrabold text-xl text-yellow-300"></span>
+        </div>
+        <p id="lbMemo" class="text-lg font-bold text-slate-200 mt-0.5"></p>
+      </div>
+      <button onclick="closeLightbox()" class="w-14 h-14 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-2xl flex items-center justify-center shadow">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- 중앙 이미지 영역 (핀치 줌 및 고해상도 확인) -->
+    <div class="flex-1 flex items-center justify-center overflow-auto my-3">
+      <img id="lbImage" src="" alt="유통기한 라벨 확대 사진" class="max-h-[75vh] max-w-full object-contain rounded-xl shadow-2xl" />
+    </div>
+
+    <!-- 하단 원본 링크 & 닫기 바 -->
+    <div class="flex items-center justify-between gap-3 bg-slate-900/90 px-4 py-3 rounded-2xl border border-slate-700">
+      <a id="lbDriveLink" href="#" target="_blank" rel="noopener noreferrer"
+        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl py-4 rounded-xl text-center flex items-center justify-center gap-2">
+        <i class="fa-brands fa-google-drive text-2xl"></i>
+        <span>구글 드라이브 원본 열기</span>
+      </a>
+      <button onclick="closeLightbox()"
+        class="px-8 py-4 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-black text-xl">
+        닫기
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       큰 글씨 알림 토스트
+  ========================================================== -->
+  <div id="toastBox" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl border-2 border-yellow-400 flex items-center gap-3 max-w-md w-[92%]">
+    <i class="fa-solid fa-circle-check text-3xl text-yellow-400"></i>
+    <span id="toastText" class="text-xl font-extrabold">처리가 완료되었습니다.</span>
+  </div>
+
+  <!-- =========================================================
+       JavaScript 로직 (이미지 세로 800px 리사이징 & GAS/GitHub 하이브리드 통신)
+  ========================================================== -->
   <script>
-    // ★ 여기에 구글 앱스 스크립트(GAS) 배포 후 얻은 웹앱 URL을 입력하세요.
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxtDrm_iFgk_05de0u3mbf4tOLA4kPm-WvDdsjOXEduf_0g3T-YuQ135BiSG-kFKrSV/exec';
+    /*************************************************************************
+     * [핵심 설정 구역]
+     * 1. LOCATIONS: 구역 목록 배열 (필요 시 자유롭게 추가/수정하세요)
+     * 2. GAS_WEB_APP_URL: GitHub Pages에 HTML을 올려서 사용할 경우,
+     *    Google Apps Script [배포] -> [웹 앱 URL]을 아래 따옴표 안에 넣어주세요.
+     *************************************************************************/
+    const LOCATIONS = [
+      'R3 테이크아웃존',
+      'R4 테이크아웃존',
+      'R5 테이크아웃존',
+      '기타'
+    ];
 
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('input-date').value = today;
-    document.getElementById('filter-date').value = today;
+    // GitHub 호스팅 시 연동할 GAS 웹앱 배포 URL (예: 'https://script.google.com/macros/s/AKfycb.../exec')
+    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwxgWPWNINwPLds7_jPQLeaxeNgQc_fVuz_wy58jmamKMxE414Xk9990JoZLOpRwTiZ/exec';
 
-    let uploadQueue = [];
+    // 이미지 리사이징 기준: 세로 해상도 800px, 가로 최대 1200px, JPEG 품질 0.7
+    const TARGET_HEIGHT = 800;
+    const MAX_WIDTH = 1200;
+    const JPEG_QUALITY = 0.7;
 
-    async function handleFiles(event) {
-      const files = event.target.files;
-      if (!files || files.length === 0) return;
-      
-      showLoading(true);
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const base64Data = await resizeImage(file);
-        
-        uploadQueue.push({
-          id: Date.now() + i,
-          base64Data: base64Data,
-          fileName: `${document.getElementById('input-date').value}_${file.name}`,
-          memo: '',
-          status: '정상'
-        });
+    // 전역 상태 관리
+    let allRecords = [];
+    let currentFilterDate = getTodayStr();
+    let currentFilterLocation = 'ALL';
+    let currentFilterStatus = 'ALL';
+    let currentViewMode = 'CARD'; // 'CARD' | 'TABLE'
+
+    // 업로드 폼 상태
+    let selectedFormLocation = LOCATIONS[0];
+    let selectedFormStatus = '정상';
+    let stagedImages = []; // [{ base64, width, height, sizeKB }]
+
+    // GAS 내장 환경인지 여부 확인
+    const isGasEnvironment = (typeof google !== 'undefined' && google.script && google.script.run);
+
+    // 페이지 초기화
+    window.addEventListener('DOMContentLoaded', () => {
+      initLocationButtons();
+      document.getElementById('filterDateInput').value = currentFilterDate;
+      document.getElementById('formDate').value = getTodayStr();
+
+      // 실행 환경 안내 배지 업데이트
+      const badge = document.getElementById('envBadge');
+      if (isGasEnvironment) {
+        badge.textContent = '구글 시트 실시간 연동 중 (GAS 웹앱)';
+      } else if (GAS_WEB_APP_URL) {
+        badge.textContent = '구글 시트 실시간 연동 중 (GitHub 웹앱)';
+      } else {
+        badge.textContent = '체험 모드 (GAS_WEB_APP_URL 입력 시 구글 시트와 즉시 연동됩니다)';
       }
-      renderPreviewList();
-      showLoading(false);
-      event.target.value = '';
+
+      loadDashboardData();
+    });
+
+    // 오늘 날짜 YYYY-MM-DD 반환 (로컬 시간 기준)
+    function getTodayStr(offsetDays = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
     }
 
-    function resizeImage(file) {
-      return new Promise((resolve) => {
+    // 상단 구역 필터 및 입력 모달 구역 버튼 동적 생성
+    function initLocationButtons() {
+      // 1. 대시보드 필터 바
+      const filterBar = document.getElementById('locationFilterBar');
+      let filterHtml = `
+        <button onclick="setLocationFilter('ALL')" data-loc="ALL"
+          class="loc-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-blue-600 bg-blue-600 text-white shadow">
+          전체 구역
+        </button>
+      `;
+      LOCATIONS.forEach(loc => {
+        filterHtml += `
+          <button onclick="setLocationFilter('${loc}')" data-loc="${loc}"
+            class="loc-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-300 bg-white text-slate-800">
+            ${loc}
+          </button>
+        `;
+      });
+      filterBar.innerHTML = filterHtml;
+
+      // 2. 입력 폼 구역 선택 그리드
+      const formGrid = document.getElementById('formLocationGrid');
+      let formHtml = '';
+      LOCATIONS.forEach((loc, idx) => {
+        const isSelected = idx === 0;
+        formHtml += `
+          <button type="button" onclick="selectFormLocation('${loc}')" data-val="${loc}"
+            class="form-loc-btn py-4 px-3 rounded-2xl font-black text-xl border-2 transition ${
+              isSelected
+                ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                : 'border-slate-300 bg-slate-50 text-slate-800'
+            }">
+            ${loc}
+          </button>
+        `;
+      });
+      formGrid.innerHTML = formHtml;
+    }
+
+    /*************************************************************************
+     * [이미지 리사이징 엔진]
+     * - 세로 해상도 800px 기준 비율 유지 리사이징 (가로 최대 1200px 캡 적용)
+     * - JPEG 품질 0.7 압축
+     *************************************************************************/
+    function resizeImageToBase64(file) {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
+            // 1. 세로 800px 기준으로 비율 계산
+            let targetHeight = TARGET_HEIGHT;
+            let scale = targetHeight / img.height;
+            let targetWidth = Math.round(img.width * scale);
+
+            // 2. 만약 가로가 1200px을 초과하면 가로 1200px에 맞춰 재조정
+            if (targetWidth > MAX_WIDTH) {
+              targetWidth = MAX_WIDTH;
+              targetHeight = Math.round((img.height * MAX_WIDTH) / img.width);
+            }
+
             const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const targetHeight = 800;
-            const targetWidth = Math.floor(img.width * (targetHeight / img.height));
-            
             canvas.width = targetWidth;
             canvas.height = targetHeight;
-            
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
+
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
             ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-            
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
+
+            const base64 = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+            const sizeKB = Math.round((base64.length * 3) / 4 / 1024);
+
+            resolve({
+              base64: base64,
+              width: targetWidth,
+              height: targetHeight,
+              sizeKB: sizeKB
+            });
           };
+          img.onerror = () => reject(new Error('이미지 로드 실패'));
           img.src = e.target.result;
         };
+        reader.onerror = () => reject(new Error('파일 읽기 실패'));
         reader.readAsDataURL(file);
       });
     }
 
-    function renderPreviewList() {
-      // (이전 답변의 renderPreviewList 함수 내용과 동일)
-      const container = document.getElementById('preview-list');
-      const submitBtn = document.getElementById('btn-submit');
-      container.innerHTML = '';
-      
-      if (uploadQueue.length > 0) submitBtn.classList.remove('hidden');
-      else submitBtn.classList.add('hidden');
+    // 사진 촬영 또는 다중 파일 선택 처리
+    async function handleFilesSelected(fileList) {
+      if (!fileList || fileList.length === 0) return;
 
-      uploadQueue.forEach((item) => {
-        const card = document.createElement('div');
-        card.className = "bg-white p-4 rounded-2xl shadow-sm border-2 border-gray-100 flex gap-4";
-        card.innerHTML = `
-          <div class="w-1/3 flex-shrink-0 relative">
-            <img src="${item.base64Data}" class="w-full h-32 object-cover rounded-xl border border-gray-200">
-            <button onclick="removeItem(${item.id})" class="absolute -top-2 -right-2 bg-red-500 text-white w-8 h-8 rounded-full shadow font-bold">X</button>
-          </div>
-          <div class="w-2/3 flex flex-col justify-between">
-            <input type="text" placeholder="제품명 / 특이사항 (터치)" 
-                   class="w-full text-lg p-3 border-b-2 border-gray-300 focus:border-blue-500 outline-none bg-gray-50 rounded-t-lg"
-                   onchange="updateQueueData(${item.id}, 'memo', this.value)" value="${item.memo}">
-            <div class="flex gap-2 mt-2">
-              <button onclick="updateStatus(${item.id}, '정상')" class="status-btn flex-1 py-2 rounded-xl text-lg font-bold border-2 ${item.status === '정상' ? 'bg-green-100 border-green-500 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}">정상</button>
-              <button onclick="updateStatus(${item.id}, '임박')" class="status-btn flex-1 py-2 rounded-xl text-lg font-bold border-2 ${item.status === '임박' ? 'bg-yellow-100 border-yellow-500 text-yellow-700' : 'bg-gray-100 border-gray-200 text-gray-500'}">임박</button>
-              <button onclick="updateStatus(${item.id}, '폐기대상')" class="status-btn flex-1 py-2 rounded-xl text-lg font-bold border-2 ${item.status === '폐기대상' ? 'bg-red-100 border-red-500 text-red-700' : 'bg-gray-100 border-gray-200 text-gray-500'}">폐기</button>
-            </div>
-          </div>
-        `;
-        container.appendChild(card);
-      });
+      showToast(`사진 ${fileList.length}장을 선명하게 압축 중입니다...`);
+
+      for (let i = 0; i < fileList.length; i++) {
+        try {
+          const resized = await resizeImageToBase64(fileList[i]);
+          stagedImages.push(resized);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      // 동일 파일 재선택 가능하도록 input 초기화
+      document.getElementById('cameraInput').value = '';
+      document.getElementById('galleryInput').value = '';
+
+      renderStagedPreviews();
+      showToast(`사진이 총 ${stagedImages.length}장 준비되었습니다.`);
     }
 
-    function updateQueueData(id, key, value) {
-      const item = uploadQueue.find(q => q.id === id);
-      if (item) item[key] = value;
-    }
+    // 모달 내 선택된 사진 썸네일 렌더링
+    function renderStagedPreviews() {
+      const container = document.getElementById('previewContainer');
+      const grid = document.getElementById('previewGrid');
+      const badge = document.getElementById('photoCountBadge');
 
-    function updateStatus(id, statusStr) {
-      updateQueueData(id, 'status', statusStr);
-      renderPreviewList();
-    }
+      badge.textContent = `${stagedImages.length}장 선택됨`;
 
-    function removeItem(id) {
-      uploadQueue = uploadQueue.filter(q => q.id !== id);
-      renderPreviewList();
-    }
-
-    // ★ fetch API를 활용한 데이터 서버 전송
-    async function submitData() {
-      if (uploadQueue.length === 0) return;
-      if (GAS_URL.includes('여기에_복사한_키를_넣어주세요')) {
-        alert("코드 상단에 GAS 웹앱 URL을 먼저 입력해주세요!");
+      if (stagedImages.length === 0) {
+        container.classList.add('hidden');
+        grid.innerHTML = '';
         return;
       }
-      
-      const dateStr = document.getElementById('input-date').value;
-      const locationStr = document.getElementById('input-location').value;
-      
-      const payload = uploadQueue.map(item => ({
-        date: dateStr,
-        location: locationStr,
-        memo: item.memo || '메모 없음',
-        status: item.status,
-        base64Data: item.base64Data,
-        fileName: `${dateStr}_${locationStr}_${item.status}.jpg`
-      }));
 
-      showLoading(true);
-      
-      try {
-        // CORS Preflight 우회를 위해 text/plain 속성으로 POST 전송
-        const response = await fetch(GAS_URL, {
+      container.classList.remove('hidden');
+      grid.innerHTML = stagedImages.map((img, idx) => `
+        <div class="relative rounded-2xl overflow-hidden border-2 border-slate-300 bg-slate-900 aspect-[4/3] shadow">
+          <img src="${img.base64}" class="w-full h-full object-cover" alt="미리보기 ${idx + 1}" />
+          <span class="absolute bottom-1.5 left-1.5 bg-black/75 text-white text-xs font-bold px-2 py-0.5 rounded-lg">
+            ${img.width}x${img.height} (${img.sizeKB}KB)
+          </span>
+          <button type="button" onclick="removeStagedPhoto(${idx})"
+            class="absolute top-1.5 right-1.5 w-9 h-9 rounded-xl bg-red-600 text-white font-black text-lg flex items-center justify-center shadow-lg">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function removeStagedPhoto(idx) {
+      stagedImages.splice(idx, 1);
+      renderStagedPreviews();
+    }
+
+    function clearSelectedPhotos() {
+      stagedImages = [];
+      renderStagedPreviews();
+    }
+
+    /*************************************************************************
+     * [서버 통신 레이어]
+     * 1순위: GAS 웹앱 내부 (`google.script.run`)
+     * 2순위: GitHub Pages 외부 웹 (`fetch(GAS_WEB_APP_URL)`)
+     * 3순위: URL 미설정 시 브라우저 LocalStorage 데모 모드
+     *************************************************************************/
+    function loadDashboardData() {
+      const loadingBox = document.getElementById('loadingBox');
+      const refreshIcon = document.getElementById('refreshIcon');
+      loadingBox.classList.remove('hidden');
+      refreshIcon.classList.add('fa-spin');
+
+      // 1. GAS 내부 실행
+      if (isGasEnvironment) {
+        google.script.run
+          .withSuccessHandler((records) => {
+            loadingBox.classList.add('hidden');
+            refreshIcon.classList.remove('fa-spin');
+            allRecords = records || [];
+            renderDashboard();
+          })
+          .withFailureHandler((err) => {
+            loadingBox.classList.add('hidden');
+            refreshIcon.classList.remove('fa-spin');
+            alert('데이터 조회 오류: ' + err.message);
+          })
+          .getRecords(currentFilterDate);
+        return;
+      }
+
+      // 2. GitHub Pages 등에서 GAS_WEB_APP_URL로 통신
+      if (GAS_WEB_APP_URL) {
+        const url = `${GAS_WEB_APP_URL}?action=getRecords&dateFilter=${encodeURIComponent(currentFilterDate)}`;
+        fetch(url)
+          .then(res => res.json())
+          .then(resJson => {
+            loadingBox.classList.add('hidden');
+            refreshIcon.classList.remove('fa-spin');
+            allRecords = resJson.data || [];
+            renderDashboard();
+          })
+          .catch(err => {
+            loadingBox.classList.add('hidden');
+            refreshIcon.classList.remove('fa-spin');
+            alert('서버 연결 실패: ' + err.message);
+          });
+        return;
+      }
+
+      // 3. GitHub에서 바로 열었을 때 테스트용 로컬 스토리지/샘플 데이터
+      setTimeout(() => {
+        loadingBox.classList.add('hidden');
+        refreshIcon.classList.remove('fa-spin');
+        const saved = localStorage.getItem('DEMO_EXPIRY_LOGS');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          allRecords = (currentFilterDate === 'ALL')
+            ? parsed
+            : parsed.filter(r => r.date === currentFilterDate);
+        } else {
+          allRecords = getInitialSampleData();
+        }
+        renderDashboard();
+      }, 250);
+    }
+
+    // 점검 데이터 업로드 실행
+    function submitInspection() {
+      if (stagedImages.length === 0) {
+        alert('라벨 사진을 최소 1장 이상 촬영하거나 선택해 주세요!');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      const submitBtnText = document.getElementById('submitBtnText');
+      submitBtn.disabled = true;
+      submitBtnText.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> 사진 ${stagedImages.length}장 업로드 중...`;
+
+      const payload = {
+        action: 'upload',
+        date: document.getElementById('formDate').value || getTodayStr(),
+        location: selectedFormLocation,
+        status: selectedFormStatus,
+        memo: document.getElementById('formMemo').value.trim() || '유통기한 라벨 점검',
+        images: stagedImages.map(img => ({ base64: img.base64 }))
+      };
+
+      // 1. GAS 내부 실행
+      if (isGasEnvironment) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            onUploadSuccess(res.count || stagedImages.length, payload.date);
+          })
+          .withFailureHandler((err) => {
+            resetSubmitButton();
+            alert('업로드 중 오류가 발생했습니다: ' + err.message);
+          })
+          .uploadRecord(payload);
+        return;
+      }
+
+      // 2. GitHub Pages 외부 웹에서 GAS로 전송 (text/plain으로 CORS Preflight 방지)
+      if (GAS_WEB_APP_URL) {
+        fetch(GAS_WEB_APP_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(payload)
+        })
+          .then(res => res.json())
+          .then(resJson => {
+            if (resJson.status === 'error') throw new Error(resJson.message);
+            onUploadSuccess(resJson.count || stagedImages.length, payload.date);
+          })
+          .catch(err => {
+            resetSubmitButton();
+            alert('업로드 실패: ' + err.message);
+          });
+        return;
+      }
+
+      // 3. 로컬 데모 모드 저장
+      setTimeout(() => {
+        const nowStr = new Date().toLocaleString('sv-SE');
+        const saved = JSON.parse(localStorage.getItem('DEMO_EXPIRY_LOGS') || '[]');
+        stagedImages.forEach((img, i) => {
+          const itemMemo = stagedImages.length > 1
+            ? `${payload.memo} (${i + 1}/${stagedImages.length})`
+            : payload.memo;
+          saved.unshift({
+            timestamp: nowStr,
+            date: payload.date,
+            location: payload.location,
+            memo: itemMemo,
+            status: payload.status,
+            driveUrl: img.base64,
+            thumbnailKey: '',
+            localBase64: img.base64
+          });
         });
-        
-        const res = await response.json();
-        
-        showLoading(false);
-        if (res.success) {
-          alert(`총 ${res.count}건의 점검 사진이 성공적으로 업로드 되었습니다.`);
-          uploadQueue = [];
-          renderPreviewList();
-          switchTab('dashboard');
-        } else {
-          alert('업로드 실패: ' + res.error);
-        }
-      } catch (err) {
-        showLoading(false);
-        alert('네트워크 오류가 발생했습니다: ' + err.message);
-      }
+        localStorage.setItem('DEMO_EXPIRY_LOGS', JSON.stringify(saved));
+        onUploadSuccess(stagedImages.length, payload.date);
+      }, 500);
     }
 
-    // ★ fetch API를 활용한 대시보드 데이터 조회
-    async function loadDashboard() {
-      if (GAS_URL.includes('여기에_복사한_키를_넣어주세요')) return;
+    function onUploadSuccess(count, uploadedDate) {
+      resetSubmitButton();
+      closeUploadModal();
+      clearSelectedPhotos();
+      document.getElementById('formMemo').value = '';
+      showToast(`사진 ${count}장이 성공적으로 등록되었습니다!`);
 
-      const filterDate = document.getElementById('filter-date').value;
-      const container = document.getElementById('dashboard-list');
-      container.innerHTML = '<div class="text-center p-10 text-gray-500 text-xl font-bold"><i class="fa-solid fa-spinner fa-spin mr-2"></i>불러오는 중...</div>';
-      
-      try {
-        const response = await fetch(`${GAS_URL}?action=getRecords&date=${filterDate}`);
-        const res = await response.json();
-        
-        if (res.success) {
-          renderDashboard(res.data);
-        } else {
-          container.innerHTML = `<div class="text-center p-10 text-red-500 font-bold">오류: ${res.message}</div>`;
-        }
-      } catch (err) {
-        container.innerHTML = `<div class="text-center p-10 text-red-500 font-bold">데이터를 불러오지 못했습니다.</div>`;
-      }
+      // 업로드한 날짜로 조회 필터 맞춰서 즉시 새로고침
+      currentFilterDate = uploadedDate;
+      document.getElementById('filterDateInput').value = uploadedDate;
+      updateDateButtonsUI('CUSTOM');
+      loadDashboardData();
     }
 
-    function renderDashboard(records) {
-      // (이전 답변의 renderDashboard 함수 내용과 완전히 동일)
-      const container = document.getElementById('dashboard-list');
-      container.innerHTML = '';
-      let issueCount = 0;
+    function resetSubmitButton() {
+      const submitBtn = document.getElementById('submitBtn');
+      const submitBtnText = document.getElementById('submitBtnText');
+      submitBtn.disabled = false;
+      submitBtnText.textContent = '점검 완료 및 사진 올리기';
+    }
 
-      if (records.length === 0) {
-        container.innerHTML = '<div class="bg-white p-10 rounded-2xl shadow-sm text-center text-gray-500 text-xl font-bold">해당 날짜에 점검 기록이 없습니다.</div>';
-      } else {
-        records.forEach(item => {
-          if (item.status === '임박' || item.status === '폐기대상') issueCount++;
-          const thumbUrl = `https://drive.google.com/thumbnail?id=${item.fileId}&sz=w800`;
-          
-          let statusBadge = '';
-          if(item.status === '정상') statusBadge = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-bold border border-green-200">정상</span>';
-          if(item.status === '임박') statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-lg text-sm font-bold border border-yellow-200">임박</span>';
-          if(item.status === '폐기대상') statusBadge = '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-sm font-bold border border-red-200">폐기대상</span>';
+    /*************************************************************************
+     * [대시보드 렌더링 & 요약 계산]
+     *************************************************************************/
+    function renderDashboard() {
+      // 1. 상단 요약 카드 업데이트 (날짜 기준 전체 데이터로 집계)
+      document.getElementById('sumTotal').textContent = allRecords.length;
 
-          const card = document.createElement('div');
-          card.className = "bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col";
-          card.innerHTML = `
-            <div class="h-48 w-full bg-gray-100 relative cursor-pointer" onclick="openImageModal('${thumbUrl}', '${item.fileUrl}')">
-              <img src="${thumbUrl}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/800x400?text=Image+Not+Found'">
-              <div class="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-sm">
-                <i class="fa-solid fa-magnifying-glass mr-1"></i>확대
+      const alertCount = allRecords.filter(r => r.status === '임박' || r.status === '폐기대상').length;
+      document.getElementById('sumAlert').textContent = alertCount;
+
+      const locCounts = {};
+      LOCATIONS.forEach(l => locCounts[l] = 0);
+      allRecords.forEach(r => {
+        locCounts[r.location] = (locCounts[r.location] || 0) + 1;
+      });
+
+      const locBadgeContainer = document.getElementById('sumLocationBadges');
+      locBadgeContainer.innerHTML = LOCATIONS.map(loc => `
+        <div class="bg-slate-100 rounded-xl px-3 py-2 flex items-center justify-between border border-slate-200">
+          <span class="font-extrabold text-slate-700 text-base truncate pr-1">${loc.replace(' 테이크아웃존', '')}</span>
+          <span class="font-black text-lg ${locCounts[loc] > 0 ? 'text-blue-700' : 'text-slate-400'}">${locCounts[loc] || 0}건</span>
+        </div>
+      `).join('');
+
+      // 2. 위치/상태 필터 적용
+      const filtered = allRecords.filter(r => {
+        const matchLoc = (currentFilterLocation === 'ALL') || (r.location === currentFilterLocation);
+        const matchStatus = (currentFilterStatus === 'ALL') || (r.status === currentFilterStatus);
+        return matchLoc && matchStatus;
+      });
+
+      const emptyBox = document.getElementById('emptyBox');
+      const cardView = document.getElementById('cardGalleryView');
+      const tableView = document.getElementById('tableView');
+
+      if (filtered.length === 0) {
+        emptyBox.classList.remove('hidden');
+        cardView.innerHTML = '';
+        document.getElementById('tableBody').innerHTML = '';
+        return;
+      }
+      emptyBox.classList.add('hidden');
+
+      // 3. 카드 갤러리 렌더링
+      cardView.innerHTML = filtered.map((item, idx) => {
+        const thumbUrl = getThumbnailUrl(item);
+        const statusStyle = getStatusStyle(item.status);
+        return `
+          <article class="bg-white rounded-3xl shadow-md border-2 ${statusStyle.border} overflow-hidden flex flex-col justify-between">
+            <div>
+              <!-- 썸네일 영역 (클릭 시 전체화면 확대) -->
+              <div onclick="openLightbox(${idx})" class="relative aspect-[4/3] bg-slate-900 cursor-pointer group overflow-hidden">
+                <img src="${thumbUrl}" alt="${escapeHtml(item.memo)}" loading="lazy"
+                  class="w-full h-full object-cover group-hover:scale-105 transition duration-200" />
+                <div class="absolute top-3 left-3">
+                  <span class="px-4 py-1.5 rounded-xl font-black text-lg shadow-lg ${statusStyle.badge}">
+                    ${statusStyle.icon} ${escapeHtml(item.status)}
+                  </span>
+                </div>
+                <div class="absolute bottom-3 right-3 bg-black/75 text-white px-3.5 py-1.5 rounded-xl font-extrabold text-base flex items-center gap-1.5">
+                  <i class="fa-solid fa-magnifying-glass-plus text-yellow-300"></i> 크게 보기
+                </div>
+              </div>
+
+              <!-- 정보 영역 -->
+              <div class="p-5">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <span class="bg-blue-100 text-blue-900 font-black px-3.5 py-1 rounded-xl text-lg">
+                    ${escapeHtml(item.location)}
+                  </span>
+                  <span class="text-slate-500 font-bold text-base">
+                    ${escapeHtml(item.timestamp.substring(5, 16))}
+                  </span>
+                </div>
+                <h3 class="text-2xl font-black text-slate-900 leading-snug mt-2">
+                  ${escapeHtml(item.memo)}
+                </h3>
               </div>
             </div>
-            <div class="p-4 space-y-2">
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold text-lg"><i class="fa-solid fa-location-dot mr-1"></i>${item.location}</span>
-                ${statusBadge}
-              </div>
-              <p class="text-xl font-black text-gray-800 break-words">${item.memo}</p>
-              <p class="text-sm text-gray-400 text-right">${item.timestamp}</p>
+
+            <div class="px-5 pb-4 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button onclick="openLightbox(${idx})"
+                class="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-lg flex items-center justify-center gap-2">
+                <i class="fa-solid fa-expand text-blue-600"></i> 라벨 숫자 확대
+              </button>
+              <a href="${item.driveUrl || '#'}" target="_blank" rel="noopener noreferrer"
+                class="py-3 px-4 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 font-extrabold text-lg flex items-center justify-center" title="구글 드라이브 원본">
+                <i class="fa-brands fa-google-drive text-xl"></i>
+              </a>
             </div>
-          `;
-          container.appendChild(card);
-        });
-      }
-      document.getElementById('sum-total').innerHTML = `${records.length}<span class="text-xl font-normal ml-1">건</span>`;
-      document.getElementById('sum-issue').innerHTML = `${issueCount}<span class="text-xl font-normal ml-1 text-gray-800">건</span>`;
+          </article>
+        `;
+      }).join('');
+
+      // 4. 테이블 뷰 렌더링
+      document.getElementById('tableBody').innerHTML = filtered.map((item, idx) => {
+        const thumbUrl = getThumbnailUrl(item);
+        const statusStyle = getStatusStyle(item.status);
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-3 px-4">
+              <img src="${thumbUrl}" onclick="openLightbox(${idx})"
+                class="w-24 h-20 object-cover rounded-xl border-2 border-slate-300 cursor-pointer shadow-sm" alt="썸네일" />
+            </td>
+            <td class="py-3 px-4">
+              <span class="inline-block px-3.5 py-1.5 rounded-xl font-black text-lg ${statusStyle.badge}">
+                ${statusStyle.icon} ${escapeHtml(item.status)}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-slate-900 font-black">${escapeHtml(item.location)}</td>
+            <td class="py-3 px-4 text-slate-800">${escapeHtml(item.memo)}</td>
+            <td class="py-3 px-4 text-slate-500 text-base">${escapeHtml(item.timestamp)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // 현재 필터링된 목록을 라이트박스에서 참조할 수 있도록 저장
+      window._currentFilteredList = filtered;
     }
 
-    // (이하 showLoading, switchTab, openImageModal, closeImageModal 함수는 이전과 동일)
-    function showLoading(show) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; }
-    function switchTab(tab) {
-      document.getElementById('tab-upload').classList.add('hidden');
-      document.getElementById('tab-dashboard').classList.add('hidden');
-      document.getElementById(`tab-${tab}`).classList.remove('hidden');
-      const navUpload = document.getElementById('nav-upload');
-      const navDash = document.getElementById('nav-dashboard');
-      if(tab === 'upload') {
-        navUpload.className = "flex-1 flex flex-col items-center p-2 text-blue-600 font-bold transition scale-110";
-        navDash.className = "flex-1 flex flex-col items-center p-2 text-gray-400 font-bold transition";
-        window.scrollTo(0,0);
+    // 구글 드라이브 썸네일 URL 생성 (https://drive.google.com/thumbnail?id=...&sz=w800)
+    function getThumbnailUrl(item) {
+      if (item.localBase64) return item.localBase64;
+      if (item.thumbnailKey) {
+        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(item.thumbnailKey)}&sz=w800`;
+      }
+      return item.driveUrl || '';
+    }
+
+    function getStatusStyle(status) {
+      if (status === '폐기대상') {
+        return {
+          badge: 'bg-red-600 text-white',
+          border: 'border-red-500',
+          icon: '🔴'
+        };
+      }
+      if (status === '임박') {
+        return {
+          badge: 'bg-amber-500 text-slate-950',
+          border: 'border-amber-500',
+          icon: '🟡'
+        };
+      }
+      return {
+        badge: 'bg-emerald-600 text-white',
+        border: 'border-slate-200',
+        icon: '🟢'
+      };
+    }
+
+    /*************************************************************************
+     * [필터 및 UI 인터랙션 함수]
+     *************************************************************************/
+    function setQuickDate(mode) {
+      if (mode === 'TODAY') {
+        currentFilterDate = getTodayStr(0);
+        document.getElementById('filterDateInput').value = currentFilterDate;
+      } else if (mode === 'YESTERDAY') {
+        currentFilterDate = getTodayStr(-1);
+        document.getElementById('filterDateInput').value = currentFilterDate;
+      } else if (mode === 'ALL') {
+        currentFilterDate = 'ALL';
+      }
+      updateDateButtonsUI(mode);
+      loadDashboardData();
+    }
+
+    function onDateFilterChange(val) {
+      currentFilterDate = val || 'ALL';
+      updateDateButtonsUI('CUSTOM');
+      loadDashboardData();
+    }
+
+    function updateDateButtonsUI(activeMode) {
+      const btnY = document.getElementById('btnDateYesterday');
+      const btnT = document.getElementById('btnDateToday');
+      const btnA = document.getElementById('btnDateAll');
+      const baseClass = 'py-3 px-4 rounded-2xl font-extrabold text-lg md:text-xl border-2 border-slate-300 bg-white text-slate-700 active:scale-95';
+      const activeClass = 'py-3 px-4 rounded-2xl font-extrabold text-lg md:text-xl border-2 border-blue-600 bg-blue-600 text-white shadow active:scale-95';
+
+      btnY.className = activeMode === 'YESTERDAY' ? activeClass : baseClass;
+      btnT.className = activeMode === 'TODAY' ? activeClass : baseClass;
+      btnA.className = activeMode === 'ALL' ? activeClass : baseClass;
+    }
+
+    function setLocationFilter(loc) {
+      currentFilterLocation = loc;
+      document.querySelectorAll('.loc-filter-btn').forEach(btn => {
+        const isActive = btn.getAttribute('data-loc') === loc;
+        btn.className = isActive
+          ? 'loc-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-blue-600 bg-blue-600 text-white shadow'
+          : 'loc-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-300 bg-white text-slate-800';
+      });
+      renderDashboard();
+    }
+
+    function setStatusFilter(status) {
+      currentFilterStatus = status;
+      document.querySelectorAll('.status-filter-btn').forEach(btn => {
+        const isActive = btn.getAttribute('data-status') === status;
+        if (isActive) {
+          btn.className = 'status-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-900 bg-slate-900 text-white shadow';
+        } else {
+          btn.className = 'status-filter-btn px-5 py-3 rounded-2xl font-extrabold text-lg border-2 border-slate-300 bg-white text-slate-800';
+        }
+      });
+      renderDashboard();
+    }
+
+    function setViewMode(mode) {
+      currentViewMode = mode;
+      const cardView = document.getElementById('cardGalleryView');
+      const tableView = document.getElementById('tableView');
+      const btnCard = document.getElementById('btnViewCard');
+      const btnTable = document.getElementById('btnViewTable');
+
+      if (mode === 'CARD') {
+        cardView.classList.remove('hidden');
+        tableView.classList.add('hidden');
+        btnCard.className = 'px-5 py-3 rounded-xl font-extrabold text-lg bg-blue-600 text-white shadow flex items-center justify-center gap-2';
+        btnTable.className = 'px-5 py-3 rounded-xl font-extrabold text-lg text-slate-700 flex items-center justify-center gap-2';
       } else {
-        navDash.className = "flex-1 flex flex-col items-center p-2 text-blue-600 font-bold transition scale-110";
-        navUpload.className = "flex-1 flex flex-col items-center p-2 text-gray-400 font-bold transition";
-        if(document.getElementById('dashboard-list').innerHTML.trim() === '') loadDashboard();
-        window.scrollTo(0,0);
+        cardView.classList.add('hidden');
+        tableView.classList.remove('hidden');
+        btnTable.className = 'px-5 py-3 rounded-xl font-extrabold text-lg bg-blue-600 text-white shadow flex items-center justify-center gap-2';
+        btnCard.className = 'px-5 py-3 rounded-xl font-extrabold text-lg text-slate-700 flex items-center justify-center gap-2';
       }
     }
-    function openImageModal(imgSrc, originalUrl) {
-      document.getElementById('modal-img').src = imgSrc;
-      document.getElementById('modal-link').href = originalUrl;
-      document.getElementById('image-modal').classList.remove('hidden');
+
+    // 모달 내부 구역 및 상태 선택
+    function selectFormLocation(loc) {
+      selectedFormLocation = loc;
+      document.querySelectorAll('.form-loc-btn').forEach(btn => {
+        const isSelected = btn.getAttribute('data-val') === loc;
+        btn.className = `form-loc-btn py-4 px-3 rounded-2xl font-black text-xl border-2 transition ${
+          isSelected
+            ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+            : 'border-slate-300 bg-slate-50 text-slate-800'
+        }`;
+      });
     }
-    function closeImageModal() {
-      document.getElementById('image-modal').classList.add('hidden');
-      document.getElementById('modal-img').src = '';
+
+    function selectFormStatus(status) {
+      selectedFormStatus = status;
+      const styles = {
+        '정상': 'border-4 border-emerald-600 bg-emerald-600 text-white shadow',
+        '임박': 'border-4 border-amber-500 bg-amber-500 text-slate-950 shadow',
+        '폐기대상': 'border-4 border-red-600 bg-red-600 text-white shadow'
+      };
+      document.querySelectorAll('.form-status-btn').forEach(btn => {
+        const val = btn.getAttribute('data-val');
+        if (val === status) {
+          btn.className = `form-status-btn py-4 px-3 rounded-2xl font-black text-xl flex flex-col items-center gap-1 ${styles[val]}`;
+        } else {
+          btn.className = 'form-status-btn py-4 px-3 rounded-2xl font-black text-xl border-2 border-slate-300 bg-white text-slate-700 flex flex-col items-center gap-1';
+        }
+      });
+    }
+
+    function setQuickMemo(text) {
+      const input = document.getElementById('formMemo');
+      input.value = input.value ? `${input.value}, ${text}` : text;
+    }
+
+    function openUploadModal() {
+      document.getElementById('formDate').value = getTodayStr();
+      document.getElementById('uploadModal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeUploadModal() {
+      document.getElementById('uploadModal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    // 라이트박스 (원본 비율 확대 모달)
+    function openLightbox(idx) {
+      const list = window._currentFilteredList || [];
+      const item = list[idx];
+      if (!item) return;
+
+      const style = getStatusStyle(item.status);
+      const badge = document.getElementById('lbStatusBadge');
+      badge.textContent = `${style.icon} ${item.status}`;
+      badge.className = `px-3.5 py-1 rounded-xl font-black text-lg ${style.badge}`;
+
+      document.getElementById('lbLocation').textContent = item.location;
+      document.getElementById('lbMemo').textContent = `${item.memo} (${item.timestamp})`;
+      document.getElementById('lbImage').src = getThumbnailUrl(item);
+      document.getElementById('lbDriveLink').href = item.driveUrl || '#';
+
+      document.getElementById('lightboxModal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightboxModal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      document.getElementById('toastText').textContent = msg;
+      box.classList.remove('hidden');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        box.classList.add('hidden');
+      }, 3000);
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // GitHub에서 바로 열었을 때 화면 레이아웃을 즉시 확인할 수 있는 샘플 라벨 SVG 데이터
+    function getInitialSampleData() {
+      const today = getTodayStr();
+      const makeLabelSvg = (title, exp, bg) => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">
+          <rect width="100%" height="100%" fill="${bg}"/>
+          <rect x="60" y="60" width="680" height="480" rx="24" fill="#ffffff" stroke="#0f172a" stroke-width="8"/>
+          <text x="100" y="160" font-size="44" font-family="sans-serif" font-weight="bold" fill="#1e3a8a">[테이크아웃 유통기한 라벨]</text>
+          <text x="100" y="250" font-size="52" font-family="sans-serif" font-weight="bold" fill="#0f172a">품명: ${title}</text>
+          <line x1="100" y1="300" x2="700" y2="300" stroke="#cbd5e1" stroke-width="4"/>
+          <text x="100" y="390" font-size="56" font-family="sans-serif" font-weight="bold" fill="#dc2626">유통기한: ${exp}</text>
+          <text x="100" y="470" font-size="34" font-family="sans-serif" fill="#475569">보관방법: 냉장보관 (0~10℃)</text>
+        </svg>`;
+        return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+      };
+
+      return [
+        {
+          timestamp: `${today} 08:30:12`,
+          date: today,
+          location: 'R3 테이크아웃존',
+          memo: '그릴드 닭가슴살 샐러드 (샘플)',
+          status: '정상',
+          driveUrl: '#',
+          localBase64: makeLabelSvg('그릴드 닭가슴살 샐러드', `${today} 20:00까지`, '#dbeafe')
+        },
+        {
+          timestamp: `${today} 08:45:00`,
+          date: today,
+          location: 'R4 테이크아웃존',
+          memo: '에그 클럽 샌드위치 (샘플)',
+          status: '임박',
+          driveUrl: '#',
+          localBase64: makeLabelSvg('에그 클럽 샌드위치', `${today} 14:00까지`, '#fef3c7')
+        }
+      ];
     }
   </script>
+</body>
+</html>
